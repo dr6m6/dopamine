@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Installation guide
+    url: https://github.com/dr6m6/dopamine/blob/main/docs/installation.md
+    about: Requirements, installation, updates and troubleshooting.
+  - name: Report a security vulnerability
+    url: https://github.com/dr6m6/dopamine/security/advisories/new
+    about: Send sensitive reports privately.

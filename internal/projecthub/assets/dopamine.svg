@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 72 72">
+  <title>dopamine molecule</title>
+  <!-- Same ring, two left branches and right side chain as the Dashboard.
+       Continuous bonds keep the terminal's dotted silhouette legible at 24px. -->
+  <g fill="none" stroke="#8a8a8a" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M13 29 25 22 37 29 37 45 25 52 13 45Z"/>
+    <path d="M13 29 5 23M13 45 5 51M37 29 49 22 59 29 67 23"/>
+    <path d="M17 32V42M25 26 33 31M33 43 25 48" stroke-width="2.1"/>
+  </g>
+</svg>

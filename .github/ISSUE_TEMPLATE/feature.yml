@@ -1,0 +1,16 @@
+name: Feature request
+description: Suggest an improvement to dopamine.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+      description: Describe the workflow and the problem you run into.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Suggested behavior
+      description: A concrete example helps.

@@ -1,0 +1,12 @@
+
+          [1mdopamine[0m
+[7m 1 [0m
+          [1mwebsite[0m
+          /tmp/dopamine-docs-w34h6ese/projects/website
+          http://127.0.0.1:53819/
+
+        > new codex session
+          new terminal
+          start server
+          stop server
+          open url

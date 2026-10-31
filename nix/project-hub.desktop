@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=dopamine
+Comment=Codex workspaces and project servers
+Exec=project-hub
+Terminal=true
+Categories=Development;
+StartupNotify=false

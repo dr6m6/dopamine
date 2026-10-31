@@ -1,0 +1,20 @@
+
+          [1mdopamine[0m
+[7m 1 [0m
+          ⢀⡀      ⣀⠤⡢⢄⡀      ⢀⡠⠔⠤⣀      ⢀⡀
+           ⠈⠑⠢⢄⠤⠒⠉  ⠈⠑⠪⢕⡢⢄⡠⠔⠊⠁    ⠉⠒⠤⡠⠔⠊⠁
+              ⢸⢰        ⠈ ⡇
+              ⢸⢸          ⡇
+              ⢸⠸        ⢀ ⡇
+           ⢀⡠⠔⠊⠒⠤⣀  ⢀⡠⠔⣊⠥⠒⠁
+          ⠈⠁      ⠉⠒⠥⠒⠉
+
+        > website   running
+          api       stopped
+          dotfiles
+          notes
+
+          new terminal
+          + add folder…
+
+          notifications: on
