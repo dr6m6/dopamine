@@ -229,6 +229,9 @@ for line in sys.stdin:
             assert "start server" in screen(), "open url closed the project menu"
             key(b"x")
             wait_for(lambda: json.loads(record_path.read_text())["State"] == "Stopped", "test server did not stop")
+            # The run record changes before the TUI receives its completion
+            # message. Wait until input is accepted before opening Codex.
+            wait_for(lambda: "server stopped · Fixture" in screen(), "server stop did not finish in the interface")
             assert "start server" in screen(), "server stop closed the project menu"
             key(b"\r")
             wait_for(lambda: "CODEX FIXTURE" in screen(), "new workspace did not open")
