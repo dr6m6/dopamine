@@ -16,7 +16,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/dr6m6/dopamine/internal/projecthub"
+	"github.com/dr6m6/dopamine/internal/workspace"
 )
 
 const Molecule = `⢀⡀      ⣀⠤⡢⢄⡀      ⢀⡠⠔⠤⣀      ⢀⡀
@@ -35,9 +35,9 @@ var bright = lipgloss.NewStyle().Bold(true)
 var selected = lipgloss.NewStyle().Reverse(true)
 
 type loaded struct {
-	projects           []projecthub.Project
-	apps               map[string]projecthub.AppStatus
-	slots              []projecthub.Slot
+	projects           []workspace.Project
+	apps               map[string]workspace.AppStatus
+	slots              []workspace.Slot
 	err                error
 	notificationsMuted bool
 }
@@ -48,7 +48,7 @@ type finished struct {
 	workspaceOpened bool
 }
 type foldersChanged struct {
-	projects  []projecthub.Project
+	projects  []workspace.Project
 	projectID string
 	err       error
 }
@@ -58,10 +58,10 @@ type notificationsToggled struct {
 }
 
 type Model struct {
-	service            projecthub.Service
-	projects           []projecthub.Project
-	apps               map[string]projecthub.AppStatus
-	slots              []projecthub.Slot
+	service            workspace.Service
+	projects           []workspace.Project
+	apps               map[string]workspace.AppStatus
+	slots              []workspace.Slot
 	width, height      int
 	project            int
 	action             int
@@ -77,7 +77,7 @@ type Model struct {
 	notificationsMuted bool
 }
 
-func New(s projecthub.Service, sidebar bool, window string) Model {
+func New(s workspace.Service, sidebar bool, window string) Model {
 	input := textinput.New()
 	input.Prompt = "path: "
 	input.Placeholder = "~/folder"
@@ -248,7 +248,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switch {
 				case m.project == len(m.projects):
 					m.busy, m.status = true, "opening terminal…"
-					return m, m.perform("t", projecthub.Project{Path: m.service.Home})
+					return m, m.perform("t", workspace.Project{Path: m.service.Home})
 				case m.project == len(m.projects)+1:
 					m.addingFolder, m.status = true, ""
 					m.folderInput.Reset()
@@ -295,7 +295,7 @@ func (m Model) focus(number int) tea.Cmd {
 	return func() tea.Msg { return finished{err: m.service.FocusSlot(number)} }
 }
 
-func (m Model) perform(key string, p projecthub.Project) tea.Cmd {
+func (m Model) perform(key string, p workspace.Project) tea.Cmd {
 	return func() tea.Msg {
 		switch key {
 		case "s":
@@ -307,7 +307,7 @@ func (m Model) perform(key string, p projecthub.Project) tea.Cmd {
 			if p.AppURL == "" {
 				return finished{err: fmt.Errorf("no url configured for %s · edit %s", p.Name, m.service.RegistryPath())}
 			}
-			return finished{message: "opened · " + p.AppURL, err: projecthub.OpenURL(p.AppURL, "app")}
+			return finished{message: "opened · " + p.AppURL, err: workspace.OpenURL(p.AppURL, "app")}
 		case "n", "t":
 			kind := "codex"
 			if key == "t" {
@@ -504,7 +504,7 @@ func (m Model) helpView() string {
 	}, "\n")
 }
 
-func Run(service projecthub.Service, sidebar bool) error {
+func Run(service workspace.Service, sidebar bool) error {
 	window := ""
 	if sidebar {
 		out, err := exec.Command("tmux", "display-message", "-p", "-t", os.Getenv("TMUX_PANE"), "#{window_id}").Output()

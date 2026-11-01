@@ -1,4 +1,4 @@
-package projecthub
+package workspace
 
 import (
 	"context"
@@ -26,7 +26,7 @@ func TestAppStatusRestoresLiveProcessWithoutCodexAndDetectsMissingPane(t *testin
 			t.Fatalf("unexpected external action %s", n)
 		}
 		if live {
-			return []byte("instance|%3|0|hub-app:0.0"), nil
+			return []byte("instance|%3|0|dopamine-app:0.0"), nil
 		}
 		return nil, errors.New("missing pane")
 	}})
@@ -57,7 +57,7 @@ func TestAppExitRetainsFailureAndOnlyRemovesOwnedSession(t *testing.T) {
 				switch a[0] {
 				case "display-message":
 					if strings.Contains(a[len(a)-1], "pane_id") {
-						return []byte("own|%9|1|hub-app:0.0"), nil
+						return []byte("own|%9|1|dopamine-app:0.0"), nil
 					}
 					return []byte("own|1|" + code + "|TERM"), nil
 				case "show-options":
@@ -115,7 +115,7 @@ func TestAppStartDetachedNoKittyNoClientSwitchAndDuplicateReuse(t *testing.T) {
 			if !strings.Contains(joined, " -d ") || !strings.Contains(joined, "-c "+p.Path) {
 				t.Fatal(a)
 			}
-			return []byte("$3|hub-app:0.0|%7|99999999|/tmp/app-server"), nil
+			return []byte("$3|dopamine-app:0.0|%7|99999999|/tmp/app-server"), nil
 		case "set-hook":
 			if a[4] != "pane-died[0]" {
 				t.Fatalf("hook must use a numeric array index for tmux 3.6: %v", a)
@@ -125,7 +125,7 @@ func TestAppStartDetachedNoKittyNoClientSwitchAndDuplicateReuse(t *testing.T) {
 		case "display-message":
 			if exists {
 				r, _ := s.readRecord("app-demo")
-				return []byte(r.Token + "|%7|0|hub-app:0.0"), nil
+				return []byte(r.Token + "|%7|0|dopamine-app:0.0"), nil
 			}
 			return nil, errors.New("absent")
 		case "wait-for":
@@ -153,17 +153,17 @@ func TestKittyExplicitAttachUsesSocketAndClearsNesting(t *testing.T) {
 	useRunner(t, stubRunner{output: func(_ context.Context, n string, a ...string) ([]byte, error) {
 		if n == "tmux" {
 			if len(a) < 3 || a[0] != "-S" || a[1] != "/tmp/isolated-server" {
-				t.Fatalf("wrong server after Hub restart %v", a)
+				t.Fatalf("wrong server after dopamine restart %v", a)
 			}
 			if strings.Contains(a[len(a)-1], "socket_path") {
 				return []byte("/tmp/isolated-server"), nil
 			}
-			return []byte("own|%5|0|hub-app:0.0"), nil
+			return []byte("own|%5|0|dopamine-app:0.0"), nil
 		}
 		if n != "kitty" {
 			t.Fatal(n)
 		}
-		want := []string{"--detach", "--title", "Project Hub · Demo", "--directory", p.Path, "env", "-u", "TMUX", "-u", "TMUX_PANE", "tmux", "-S", "/tmp/isolated-server", "attach-session", "-t", "hub-app:0.0"}
+		want := []string{"--detach", "--title", "dopamine · Demo", "--directory", p.Path, "env", "-u", "TMUX", "-u", "TMUX_PANE", "tmux", "-S", "/tmp/isolated-server", "attach-session", "-t", "dopamine-app:0.0"}
 		if fmt.Sprint(a) != fmt.Sprint(want) {
 			t.Fatal(a)
 		}
@@ -176,13 +176,13 @@ func TestKittyExplicitAttachUsesSocketAndClearsNesting(t *testing.T) {
 }
 
 func TestTerminateOwnedTreeIncludingEscapedChildPreservesUnrelatedProcess(t *testing.T) {
-	if os.Getenv("PROJECT_HUB_PROCESS_TESTS") != "1" {
+	if os.Getenv("DOPAMINE_PROCESS_TESTS") != "1" {
 		t.Skip("opt-in real subprocess shutdown")
 	}
 	root := t.TempDir()
 	childPath := filepath.Join(root, "child")
 	cmd := exec.Command("sh", "-c", "trap '' INT TERM; setsid sh -c 'trap \"\" INT TERM; echo $$ > "+Quote(childPath)+"; exec sleep 60' & wait")
-	cmd.Env = append(os.Environ(), "PROJECT_HUB_APP_TOKEN=test-owned-tree")
+	cmd.Env = append(os.Environ(), "DOPAMINE_APP_TOKEN=test-owned-tree")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -235,7 +235,7 @@ func TestServiceHealthStartingFailureRecoveryAndNoDuplicate(t *testing.T) {
 			if a[0] != "display-message" {
 				t.Fatalf("duplicate launch: %v", a)
 			}
-			return []byte("own|%2|0|hub-app:0.0"), nil
+			return []byte("own|%2|0|dopamine-app:0.0"), nil
 		}
 		if n != "/run/current-system/sw/bin/vpn-run" {
 			t.Fatal(n)
@@ -283,7 +283,7 @@ func TestDetachedLifecycleIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	callback := filepath.Join(t.TempDir(), "hub-hook")
+	callback := filepath.Join(t.TempDir(), "dopamine-hook")
 	write(t, callback, "#!/bin/sh\nexec "+Quote(exe)+" -test.run=TestAppExitHookHelper -- \"$@\"\n")
 	os.Chmod(callback, 0700)
 	s.Executable = callback
@@ -297,13 +297,13 @@ func TestDetachedLifecycleIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(first.Target, "hub-app-") {
+	if !strings.HasPrefix(first.Target, "dopamine-app-") {
 		t.Fatal(first)
 	}
 	if st := s.AppStatuses([]Project{p})[p.ID]; st.State != Running {
 		t.Fatal(st)
 	}
-	// Recreate the service object (no in-memory state) as after closing the Hub.
+	// Recreate the service object (no in-memory state) as after closing the dopamine.
 	restored := Service{Home: s.Home, ConfigDir: s.ConfigDir, StateDir: s.StateDir, CodexHome: s.CodexHome, ProjectsRoot: s.ProjectsRoot, Executable: s.Executable}
 	if st := restored.AppStatuses([]Project{p})[p.ID]; st.State != Running {
 		t.Fatal(st)
@@ -328,7 +328,7 @@ func TestDetachedLifecycleIntegration(t *testing.T) {
 		t.Fatal("unrelated session stopped", err)
 	}
 	// Fast failures must retain code/log and release their own session even when
-	// no Hub is polling: the native pane-died hook does the cleanup.
+	// no dopamine is polling: the native pane-died hook does the cleanup.
 	p.Launch = []string{"sh", "-c", "echo diagnostic-marker; exit 7"}
 	failed, err := s.Start(p, "app", "")
 	if err != nil {

@@ -16,13 +16,11 @@ nix build path:.#dopamine
 |---|---|
 | `cmd/dopamine/` | Entry point and internal callbacks |
 | `internal/dopamine/` | Terminal interface |
-| `internal/projecthub/` | Project registry, tmux workspaces, servers, and notifications |
+| `internal/workspace/` | Project registry, tmux workspaces, servers, and notifications |
 | `scripts/install-dopamine.py` | Command installation |
 | `scripts/dopamine-source.py` | Source launcher |
 | `scripts/dopamine-smoke.py` | Isolated terminal integration scenario |
 | `docs/assets/dopamine/` | Project artwork and screenshots |
-
-The internal `project-hub` names remain compatible with existing user data and launchers. They are not separate product interfaces.
 
 ## Changes
 

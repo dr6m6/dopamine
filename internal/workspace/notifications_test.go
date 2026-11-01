@@ -1,4 +1,4 @@
-package projecthub
+package workspace
 
 import (
 	"bytes"
@@ -49,9 +49,9 @@ func TestNotificationNumberFollowsSlotsAndRejectsStalePanes(t *testing.T) {
 		switch args[0] {
 		case "display-message":
 			if !alive {
-				return []byte("recycled|%3|0|project-hub:1.0"), nil
+				return []byte("recycled|%3|0|dopamine:1.0"), nil
 			}
-			return []byte("owned|%3|0|project-hub:1.0"), nil
+			return []byte("owned|%3|0|dopamine:1.0"), nil
 		case "list-panes":
 			rows := "@1|%1|dashboard||0\n@3|%3||owned|0"
 			if oldVisible {
@@ -105,7 +105,7 @@ func TestCodexNotificationOverridesAreLocalAndValidTOML(t *testing.T) {
 		if name != "tmux" || args[0] != "display-message" {
 			t.Fatal(name, args)
 		}
-		return []byte("owned|%3|0|project-hub:1.0"), nil
+		return []byte("owned|%3|0|dopamine:1.0"), nil
 	}})
 	config := filepath.Join(s.CodexHome, "config.toml")
 	before := "model = 'keep-me'\n"
@@ -177,7 +177,7 @@ func TestObserverPreservesRawLogWhenDesktopNotificationsFail(t *testing.T) {
 			return nil, errors.New("no desktop bus")
 		}
 		if args[0] == "display-message" {
-			return []byte("owned|%3|0|project-hub:1.0"), nil
+			return []byte("owned|%3|0|dopamine:1.0"), nil
 		}
 		return []byte("@1|%1|dashboard||0\n@3|%3||owned|0"), nil
 	}})

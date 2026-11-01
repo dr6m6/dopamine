@@ -76,7 +76,7 @@ The `new terminal` action below the project list opens a shell in `~`; the same 
 
 ## Configure a dev server
 
-`dopamine projects` prints the current registry. Settings live in `~/.config/project-hub/projects.json`, or `$XDG_CONFIG_HOME/project-hub/projects.json`. The internal directory name is retained for data compatibility.
+`dopamine projects` prints the current registry. Settings live in `~/.config/dopamine/projects.json`, or `$XDG_CONFIG_HOME/dopamine/projects.json`.
 
 ```json
 {
@@ -97,7 +97,7 @@ Add `launch` and `app_url` to the relevant entry, preserving other projects and 
 Override the automatic discovery directory when launching:
 
 ```sh
-PROJECT_HUB_PROJECTS_ROOT="$HOME/work" dopamine
+DOPAMINE_PROJECTS_ROOT="$HOME/work" dopamine
 ```
 
 ## Keyboard shortcuts

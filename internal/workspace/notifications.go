@@ -1,4 +1,4 @@
-package projecthub
+package workspace
 
 import (
 	"bytes"
@@ -66,8 +66,8 @@ func (s Service) codexNotificationOverrides() ([]string, error) {
 }
 
 func (s Service) notificationCommand(action, key, token string) []string {
-	return []string{"env", "PROJECT_HUB_CONFIG_DIR=" + s.ConfigDir,
-		"PROJECT_HUB_STATE_DIR=" + s.StateDir, "PROJECT_HUB_PROJECTS_ROOT=" + s.ProjectsRoot,
+	return []string{"env", "DOPAMINE_CONFIG_DIR=" + s.ConfigDir,
+		"DOPAMINE_STATE_DIR=" + s.StateDir, "DOPAMINE_PROJECTS_ROOT=" + s.ProjectsRoot,
 		s.Executable, action, key, token}
 }
 

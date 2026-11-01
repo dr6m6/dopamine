@@ -1,4 +1,4 @@
-package projecthub
+package workspace
 
 import (
 	"context"
@@ -247,7 +247,7 @@ func (s Service) ConnectSkill(p Project, skill Skill) error {
 	return AtomicJSON(s.policyPath(p), policy)
 }
 
-// Rollback only removes Hub-created links. Source skills and unrecognized
+// Rollback only removes dopamine-created links. Source skills and unrecognized
 // project files are preserved, including skills installed by the user.
 func (s Service) DisconnectSkill(p Project, skill Skill) error {
 	lock, err := s.lock()
@@ -269,7 +269,7 @@ func (s Service) DisconnectSkill(p Project, skill Skill) error {
 	}
 	if target, e := os.Readlink(path); e == nil {
 		if policy.Links[skill.Name] != target {
-			return errors.New("symlink was not created by Hub; preserved")
+			return errors.New("symlink was not created by dopamine; preserved")
 		}
 		if err = os.Remove(path); err != nil {
 			return err
@@ -277,11 +277,11 @@ func (s Service) DisconnectSkill(p Project, skill Skill) error {
 		delete(policy.Links, skill.Name)
 	} else {
 		if policy.Installed[skill.Name] == "" {
-			return errors.New("skill was not installed by Hub; preserved")
+			return errors.New("skill was not installed by dopamine; preserved")
 		}
 		// ~/Documents is a separate filesystem on this host. Keep rollback
 		// beside the project, outside Codex's skill search path, to avoid EXDEV.
-		backup := filepath.Join(p.Path, ".agents/project-hub-skill-backups", skill.Name+"-"+fmt.Sprint(time.Now().UnixNano()))
+		backup := filepath.Join(p.Path, ".agents/dopamine-skill-backups", skill.Name+"-"+fmt.Sprint(time.Now().UnixNano()))
 		if err = os.MkdirAll(filepath.Dir(backup), 0700); err != nil {
 			return err
 		}
@@ -362,7 +362,7 @@ func (s Service) SkillOverridesForCwd(cliArgs ...string) ([]string, error) {
 	}
 	var selected Project
 	for _, p := range r.Projects {
-		if id := os.Getenv("PROJECT_HUB_PROJECT_ID"); id != "" && id == p.ID {
+		if id := os.Getenv("DOPAMINE_PROJECT_ID"); id != "" && id == p.ID {
 			selected = p
 			break
 		}
@@ -385,7 +385,7 @@ func (s Service) SkillOverridesForCwd(cliArgs ...string) ([]string, error) {
 	for i := 0; i < len(cliArgs); i++ {
 		a := cliArgs[i]
 		if a == "-p" || a == "--profile" || strings.HasPrefix(a, "--profile=") {
-			return nil, errors.New("project skills policy with a CLI profile requires an effective-config review; launch without -p or reset Hub toggles")
+			return nil, errors.New("project skills policy with a CLI profile requires an effective-config review; launch without -p or reset dopamine toggles")
 		}
 		if (a == "-c" || a == "--config") && i+1 < len(cliArgs) {
 			i++

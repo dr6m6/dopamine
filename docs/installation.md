@@ -78,14 +78,14 @@ Folders directly inside `~/projects` appear automatically, even without a Git re
 To use another discovery directory:
 
 ```sh
-PROJECT_HUB_PROJECTS_ROOT="$HOME/work" dopamine
+DOPAMINE_PROJECTS_ROOT="$HOME/work" dopamine
 ```
 
 To add a single external directory, select `+ add folder…`, enter an absolute path or `~/…`, optionally complete it with `Tab`, and press `Enter`. `remove from list` removes the registry entry after confirmation; files and running workspaces are kept.
 
 ## 5. Configure a dev server
 
-After the first launch, edit `~/.config/project-hub/projects.json`, or `$XDG_CONFIG_HOME/project-hub/projects.json` if set. Add a `launch` argument array and a local `app_url` to the relevant project. Keep other projects, IDs, and extra fields intact.
+After the first launch, edit `~/.config/dopamine/projects.json`, or `$XDG_CONFIG_HOME/dopamine/projects.json` if set. Add a `launch` argument array and a local `app_url` to the relevant project. Keep other projects, IDs, and extra fields intact.
 
 Example with Python's HTTP server:
 
@@ -138,13 +138,13 @@ The module adds the package to `environment.systemPackages`; you do not need `./
 
 | Default path | Contents |
 |---|---|
-| `~/.config/project-hub/projects.json` | Project registry and launch commands |
-| `~/.config/project-hub/settings.json` | Notification setting |
-| `~/.local/state/project-hub/` | Run records, logs, and Nix build links |
+| `~/.config/dopamine/projects.json` | Project registry and launch commands |
+| `~/.config/dopamine/settings.json` | Notification setting |
+| `~/.local/state/dopamine/` | Run records, logs, and Nix build links |
 | `~/.local/state/dopamine/install.json` | Source launcher installation receipt |
 | `~/.codex/` | Codex's own data and settings |
 
-Paths honor the relevant XDG variables. The registry, runtime data, and discovery directory can also be set with `PROJECT_HUB_CONFIG_DIR`, `PROJECT_HUB_STATE_DIR`, and `PROJECT_HUB_PROJECTS_ROOT`. Internal `project-hub` names are retained for compatibility with existing data.
+Paths honor the relevant XDG variables. The registry, runtime data, and discovery directory can also be set with `DOPAMINE_CONFIG_DIR`, `DOPAMINE_STATE_DIR`, and `DOPAMINE_PROJECTS_ROOT`.
 
 To uninstall the source launcher:
 

@@ -1,4 +1,4 @@
-package projecthub
+package workspace
 
 import (
 	"crypto/sha256"
@@ -65,7 +65,7 @@ func liveRecord(r Record) bool {
 }
 
 func resolveRecord(r Record) (Record, bool) {
-	out, err := recordTmux(r, "display-message", "-p", "-t", r.Pane, "#{@project_hub_token}|#{pane_id}|#{pane_dead}|#{session_name}:#{window_index}.#{pane_index}")
+	out, err := recordTmux(r, "display-message", "-p", "-t", r.Pane, "#{@dopamine_token}|#{pane_id}|#{pane_dead}|#{session_name}:#{window_index}.#{pane_index}")
 	f := strings.Split(out, "|")
 	if err != nil || len(f) != 4 || f[0] != r.Token || f[1] != r.Pane || f[2] != "0" {
 		return r, false
@@ -176,10 +176,10 @@ func (s Service) Start(p Project, kind, id string) (Record, error) {
 		}
 		args = append(s.paneEnvironment(p.ID), args...)
 	}
-	// Stay on the caller's existing server. When the Hub owns no server yet,
+	// Stay on the caller's existing server. When the dopamine owns no server yet,
 	// create its session without loading or rewriting user tmux configuration.
-	if _, err = tmux("has-session", "-t", "=project-hub"); err != nil {
-		if _, err = tmux("new-session", "-d", "-s", "project-hub", "-n", "home", "-c", p.Path); err != nil {
+	if _, err = tmux("has-session", "-t", "=dopamine"); err != nil {
+		if _, err = tmux("new-session", "-d", "-s", "dopamine", "-n", "home", "-c", p.Path); err != nil {
 			return Record{}, err
 		}
 	}
@@ -198,7 +198,7 @@ func (s Service) Start(p Project, kind, id string) (Record, error) {
 		args = append(s.paneEnvironment(p.ID), shell, "-l")
 	}
 	token := shortHash(key + strconv.FormatInt(time.Now().UnixNano(), 10))
-	if _, err = tmux("set-option", "-t", "project-hub", "history-limit", "50000"); err != nil {
+	if _, err = tmux("set-option", "-t", "dopamine", "history-limit", "50000"); err != nil {
 		return Record{}, err
 	}
 	if err = s.ConfigureShortcuts(); err != nil {
@@ -207,9 +207,9 @@ func (s Service) Start(p Project, kind, id string) (Record, error) {
 	name := p.ID + "-" + kind + "-" + token[:6]
 	// Create a gated pane first, configure logging/remain-on-exit, then exec.
 	// The gate ensures early exits still produce a diagnostic retained pane.
-	gate := "project-hub-" + token
+	gate := "dopamine-" + token
 	script := "tmux wait-for " + Quote(gate) + "; exec " + ShellArgs(args)
-	out, err := tmux("new-window", "-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}|#{pane_id}", "-t", "project-hub:", "-n", name, "-c", launchDir, script)
+	out, err := tmux("new-window", "-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}|#{pane_id}", "-t", "dopamine:", "-n", name, "-c", launchDir, script)
 	if err != nil {
 		return Record{}, err
 	}
@@ -218,7 +218,7 @@ func (s Service) Start(p Project, kind, id string) (Record, error) {
 		return Record{}, errors.New("unexpected tmux response")
 	}
 	r := Record{Key: key, Project: p.ID, Kind: kind, SessionID: id, Target: parts[0], Pane: parts[1], Token: token, Created: time.Now().Unix(), Log: filepath.Join(s.StateDir, "logs", key+".log")}
-	if _, err = tmux("set-option", "-p", "-t", r.Pane, "@project_hub_token", token); err != nil {
+	if _, err = tmux("set-option", "-p", "-t", r.Pane, "@dopamine_token", token); err != nil {
 		return r, err
 	}
 	committed := false
@@ -227,7 +227,7 @@ func (s Service) Start(p Project, kind, id string) (Record, error) {
 			_, _ = tmux("kill-pane", "-t", r.Pane)
 		}
 	}()
-	if _, err = tmux("set-option", "-p", "-t", r.Pane, "@project_hub_kind", kind); err != nil {
+	if _, err = tmux("set-option", "-p", "-t", r.Pane, "@dopamine_kind", kind); err != nil {
 		return r, err
 	}
 	if err = os.MkdirAll(filepath.Dir(r.Log), 0700); err != nil {
@@ -261,8 +261,8 @@ func (s Service) Start(p Project, kind, id string) (Record, error) {
 }
 
 func (s Service) paneEnvironment(project string) []string {
-	args := []string{"env", "PROJECT_HUB_CONFIG_DIR=" + s.ConfigDir, "PROJECT_HUB_STATE_DIR=" + s.StateDir, "PROJECT_HUB_PROJECTS_ROOT=" + s.ProjectsRoot, "PROJECT_HUB_PROJECT_ID=" + project}
-	for _, key := range []string{"HOME", "PATH", "SHELL", "PROJECT_HUB_EXECUTABLE", "CODEX_HOME", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME"} {
+	args := []string{"env", "DOPAMINE_CONFIG_DIR=" + s.ConfigDir, "DOPAMINE_STATE_DIR=" + s.StateDir, "DOPAMINE_PROJECTS_ROOT=" + s.ProjectsRoot, "DOPAMINE_PROJECT_ID=" + project}
+	for _, key := range []string{"HOME", "PATH", "SHELL", "DOPAMINE_EXECUTABLE", "CODEX_HOME", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME"} {
 		if v, ok := os.LookupEnv(key); ok {
 			args = append(args, key+"="+v)
 		}
@@ -394,7 +394,7 @@ func (s Service) nativeState(id, target string) string {
 	}
 	if status == "inProgress" || status == "in_progress" {
 		// This is a UI hint, not an approval decision. Actual approvals stay in
-		// Codex; Hub never accepts a trust or permission prompt automatically.
+		// Codex; dopamine never accepts a trust or permission prompt automatically.
 		out, _ := tmux("capture-pane", "-p", "-t", target, "-S", "-15")
 		if strings.Contains(out, "Would you like") || strings.Contains(out, "approval") {
 			return "permission"
@@ -467,11 +467,11 @@ func ProbeApp(raw string) error {
 func (s Service) ExecCodex(args []string) error {
 	for _, arg := range args {
 		if arg == "--remote" || strings.HasPrefix(arg, "--remote=") {
-			return errors.New("remote/shared server overrides are disabled for Hub sessions; use the existing VPN launcher")
+			return errors.New("remote/shared server overrides are disabled for dopamine sessions; use the existing VPN launcher")
 		}
 	}
 	if os.Getenv("TMUX_PANE") == "" {
-		return errors.New("Codex launches from Hub require a tmux pane")
+		return errors.New("Codex launches from dopamine require a tmux pane")
 	}
 	if s.CodexHome != filepath.Join(s.Home, ".codex") {
 		return errors.New("the existing VPN launcher only supports the default ~/.codex; custom CODEX_HOME launch refused")
@@ -481,7 +481,7 @@ func (s Service) ExecCodex(args []string) error {
 		return fmt.Errorf("required VPN launcher unavailable: %w", err)
 	}
 	// Config overrides persist only for this process. The native CLI still
-	// reads the real user configuration; Hub opts into automatic approval review.
+	// reads the real user configuration; dopamine opts into automatic approval review.
 	overrides, err := s.SkillOverridesForCwd(args...)
 	if err != nil {
 		return err

@@ -4,6 +4,6 @@ Report vulnerabilities privately using [GitHub's vulnerability reporting](https:
 
 The maintained product is the `dopamine` executable and its installer. The current supported environment is Linux x86_64 with Nix; Codex launches require the existing system `codex-vpn` integration described in the [installation guide](docs/installation.md).
 
-Project launch commands run with the user's permissions. Only add commands and folders you trust. Terminal transcripts are local user data, stored under `$XDG_STATE_HOME/project-hub` (default `~/.local/state/project-hub`).
+Project launch commands run with the user's permissions. Only add commands and folders you trust. Terminal transcripts are local user data, stored under `$XDG_STATE_HOME/dopamine` (default `~/.local/state/dopamine`).
 
 Fixes are provided on a best-effort basis. Third-party services, Codex accounts and operating-system VPN configuration remain outside this project's maintenance scope.

@@ -1,6 +1,6 @@
-// Package projecthub manages dopamine projects and terminal workspaces. It never
+// Package workspace manages dopamine projects and terminal workspaces. It never
 // changes Codex's user configuration, browser profiles, or existing processes.
-package projecthub
+package workspace
 
 import (
 	"encoding/json"
@@ -50,17 +50,17 @@ func Default() Service {
 		codex = filepath.Join(home, ".codex")
 	}
 	exe, _ := os.Executable()
-	if v := os.Getenv("PROJECT_HUB_EXECUTABLE"); v != "" {
+	if v := os.Getenv("DOPAMINE_EXECUTABLE"); v != "" {
 		exe = v
 	}
-	s := Service{Home: home, ConfigDir: filepath.Join(config, "project-hub"), StateDir: filepath.Join(state, "project-hub"), CodexHome: codex, ProjectsRoot: filepath.Join(home, "projects"), Executable: exe}
-	if v := os.Getenv("PROJECT_HUB_CONFIG_DIR"); v != "" {
+	s := Service{Home: home, ConfigDir: filepath.Join(config, "dopamine"), StateDir: filepath.Join(state, "dopamine"), CodexHome: codex, ProjectsRoot: filepath.Join(home, "projects"), Executable: exe}
+	if v := os.Getenv("DOPAMINE_CONFIG_DIR"); v != "" {
 		s.ConfigDir = v
 	}
-	if v := os.Getenv("PROJECT_HUB_STATE_DIR"); v != "" {
+	if v := os.Getenv("DOPAMINE_STATE_DIR"); v != "" {
 		s.StateDir = v
 	}
-	if v := os.Getenv("PROJECT_HUB_PROJECTS_ROOT"); v != "" {
+	if v := os.Getenv("DOPAMINE_PROJECTS_ROOT"); v != "" {
 		s.ProjectsRoot = v
 	}
 	s.Installer = filepath.Join(codex, "skills/.system/skill-installer/scripts/install-skill-from-github.py")
@@ -202,7 +202,7 @@ func AtomicJSON(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(filepath.Dir(path), ".hub-*")
+	f, err := os.CreateTemp(filepath.Dir(path), ".dopamine-*")
 	if err != nil {
 		return err
 	}

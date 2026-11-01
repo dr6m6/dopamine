@@ -1,4 +1,4 @@
-package projecthub
+package workspace
 
 import (
 	"context"
@@ -113,7 +113,7 @@ func TestDopamineRefreshesOnlyRailAndUsesSessionBindings(t *testing.T) {
 			}
 			respawn++
 		case "bind-key":
-			if args[2] != hubKeyTable {
+			if args[2] != dopamineKeyTable {
 				t.Fatal("global binding changed", args)
 			}
 			bindings++
@@ -127,7 +127,7 @@ func TestDopamineRefreshesOnlyRailAndUsesSessionBindings(t *testing.T) {
 			if args[3] == "@3" {
 				rail = "%5"
 			}
-			if !strings.Contains(args[5], "-t "+rail) || !strings.Contains(args[5], "#{!=:#{pane_width},5}") || !strings.Contains(args[5], "@project_hub_role") {
+			if !strings.Contains(args[5], "-t "+rail) || !strings.Contains(args[5], "#{!=:#{pane_width},5}") || !strings.Contains(args[5], "@dopamine_role") {
 				t.Fatal("resize hook lost its marked rail target or recursion guard", args)
 			}
 			resizeHooks++

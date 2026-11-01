@@ -27,7 +27,7 @@ def main():
     parser.add_argument("--capture", default="/tmp/dopamine-dashboard.txt")
     args = parser.parse_args()
     binary = str(Path(args.binary).resolve())
-    # Nix's wrapper replaces PATH and PROJECT_HUB_EXECUTABLE. Use its payload
+    # Nix's wrapper replaces PATH and DOPAMINE_EXECUTABLE. Use its payload
     # so the fixture shims, socket and fake desktop notifier stay isolated.
     payload = Path(binary).with_name("." + Path(binary).name + "-wrapped")
     if payload.is_file():
@@ -59,11 +59,11 @@ for line in sys.stdin:
  if command == 'question':
   print('\\x1bPtmux;\\x1b\\x1b]9;Question: Fixture needs an answer\\a\\x1b\\\\', end='', flush=True)
  elif command == 'done':
-  for path in (Path(os.environ['PROJECT_HUB_STATE_DIR'])/'runs').glob('*.json'):
+  for path in (Path(os.environ['DOPAMINE_STATE_DIR'])/'runs').glob('*.json'):
    record = json.loads(path.read_text())
    if record['Kind'] == 'codex' and record['Pane'] == os.environ['TMUX_PANE']:
     event = json.dumps({'type':'agent-turn-complete','thread-id':'11111111-2222-3333-4444-555555555555'})
-    subprocess.run([os.environ['PROJECT_HUB_EXECUTABLE'],'codex-notify',record['Key'],record['Token'],event],check=True)
+    subprocess.run([os.environ['DOPAMINE_EXECUTABLE'],'codex-notify',record['Key'],record['Token'],event],check=True)
  print('echo:', command, flush=True)
 """)
         shim = tools / "dopamine"
@@ -86,10 +86,10 @@ for line in sys.stdin:
         env = os.environ.copy()
         env.update(HOME=temp, XDG_STATE_HOME=str(root / "xdg-state"), XDG_CONFIG_HOME=str(root / "xdg-config"),
                    CODEX_HOME=str(root / ".codex"),
-                   PROJECT_HUB_EXECUTABLE=str(shim), PROJECT_HUB_CONFIG_DIR=str(config),
-                   PROJECT_HUB_STATE_DIR=str(root / "state"), PROJECT_HUB_PROJECTS_ROOT=str(root / "no-discover"),
+                   DOPAMINE_EXECUTABLE=str(shim), DOPAMINE_CONFIG_DIR=str(config),
+                   DOPAMINE_STATE_DIR=str(root / "state"), DOPAMINE_PROJECTS_ROOT=str(root / "no-discover"),
                    PATH=str(tools) + ":" + env["PATH"], TERM="xterm-256color", SHELL=shutil.which("bash"))
-        for key in ("TMUX", "TMUX_PANE", "PROJECT_HUB_TUI", "PROJECT_HUB_DASHBOARD"):
+        for key in ("TMUX", "TMUX_PANE", "DOPAMINE_TUI", "DOPAMINE_DASHBOARD"):
             env.pop(key, None)
         master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
@@ -116,10 +116,10 @@ for line in sys.stdin:
                 except (OSError, subprocess.CalledProcessError, urllib.error.URLError):
                     pass
                 time.sleep(0.1)
-            raise AssertionError(description + "\n" + command("capture-pane", "-p", "-t", "project-hub:"))
+            raise AssertionError(description + "\n" + command("capture-pane", "-p", "-t", "dopamine:"))
 
         def screen():
-            return command("capture-pane", "-p", "-t", "project-hub:")
+            return command("capture-pane", "-p", "-t", "dopamine:")
 
         def overview():
             text = screen()
@@ -131,10 +131,10 @@ for line in sys.stdin:
         def resize(width, height):
             fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", height, width, 0, 0))
             os.kill(process.pid, signal.SIGWINCH)
-            wait_for(lambda: command("display-message", "-p", "-t", "project-hub:", "#{window_width}") == str(width), "tmux did not receive terminal resize")
+            wait_for(lambda: command("display-message", "-p", "-t", "dopamine:", "#{window_width}") == str(width), "tmux did not receive terminal resize")
 
         def rail_is_fixed(pane):
-            rows = command("list-panes", "-t", pane, "-F", "#{pane_id}|#{pane_width}|#{@project_hub_role}").splitlines()
+            rows = command("list-panes", "-t", pane, "-F", "#{pane_id}|#{pane_width}|#{@dopamine_role}").splitlines()
             rails = [row.split("|") for row in rows if row.endswith("|dopamine-rail")]
             window_width = int(command("display-message", "-p", "-t", pane, "#{window_width}"))
             main_width = int(command("display-message", "-p", "-t", pane, "#{pane_width}"))
@@ -164,24 +164,24 @@ for line in sys.stdin:
             # copy-mode error that run-shell emits after its command exits.
             marker = root / ("missing-slot-" + str(number))
             marker.unlink(missing_ok=True)
-            binding = shlex.split(command("list-keys", "-T", "project-hub-root", "M-" + str(number)))
+            binding = shlex.split(command("list-keys", "-T", "dopamine-root", "M-" + str(number)))
             callback = binding[-1]
             assert "slot" in callback, binding
-            command("bind-key", "-T", "project-hub-root", "M-" + str(number),
+            command("bind-key", "-T", "dopamine-root", "M-" + str(number),
                     "run-shell", "-b", callback +
                     "; result=$?; printf '%s' \"$result\" > " + shlex.quote(str(marker)) +
                     "; exit \"$result\"")
             key(b"\x1b" + str(number).encode())
             wait_for(marker.exists, "missing-slot callback did not finish")
             assert marker.read_text() == "0", "missing slot returned an error"
-            assert command("display-message", "-p", "-t", "project-hub:", "#{pane_id}") == pane
+            assert command("display-message", "-p", "-t", "dopamine:", "#{pane_id}") == pane
             assert command("display-message", "-p", "-t", pane, "#{pane_in_mode}") == "0", "missing slot entered copy mode"
 
         try:
             process = connect()
             wait_for(lambda: overview() and "Fixture" in screen(), "Dashboard did not open")
-            wait_for(lambda: "project-hub" in command("list-clients", "-F", "#{client_session}"), "test client did not attach")
-            dashboard = command("display-message", "-p", "-t", "project-hub:", "#{pane_id}")
+            wait_for(lambda: "dopamine" in command("list-clients", "-F", "#{client_session}"), "test client did not attach")
+            dashboard = command("display-message", "-p", "-t", "dopamine:", "#{pane_id}")
             Path(args.capture).write_text(screen() + "\n")
             dashboard_screen = screen()
             assert all(line.index("│") == 5 for line in dashboard_screen.splitlines()[1:] if "│" in line), dashboard_screen
@@ -232,11 +232,11 @@ for line in sys.stdin:
             assert "start server" in screen(), "server stop closed the project menu"
             key(b"\r")
             wait_for(lambda: "CODEX FIXTURE" in screen(), "new workspace did not open")
-            first = command("display-message", "-p", "-t", "project-hub:", "#{pane_id}")
+            first = command("display-message", "-p", "-t", "dopamine:", "#{pane_id}")
             first_pid = command("display-message", "-p", "-t", first, "#{pane_pid}")
             missing_slot_is_ignored(3, first)
             missing_slot_is_ignored(9, first)
-            panes = command("list-panes", "-t", "project-hub:", "-F", "#{pane_width}|#{@project_hub_role}")
+            panes = command("list-panes", "-t", "dopamine:", "-F", "#{pane_width}|#{@dopamine_role}")
             assert "5|dopamine-rail" in panes, panes
             for width, height in [(220, 60), (80, 24), (180, 50), (100, 30)]:
                 resize(width, height)
@@ -273,12 +273,12 @@ for line in sys.stdin:
             key(b"\r")
             wait_for(lambda: "start server" in screen(), "project menu did not reopen for a second Codex")
             key(b"n")
-            wait_for(lambda: "CODEX FIXTURE" in screen() and command("display-message", "-p", "-t", "project-hub:", "#{pane_id}") != first, "second workspace did not open")
-            third = command("display-message", "-p", "-t", "project-hub:", "#{pane_id}")
+            wait_for(lambda: "CODEX FIXTURE" in screen() and command("display-message", "-p", "-t", "dopamine:", "#{pane_id}") != first, "second workspace did not open")
+            third = command("display-message", "-p", "-t", "dopamine:", "#{pane_id}")
             expect_notification(third, "question", 3)
             expect_notification(third, "done", 3)
             key(b"\x1b2")
-            wait_for(lambda: command("display-message", "-p", "-t", "project-hub:", "#{pane_id}") == first, "Alt+2 failed")
+            wait_for(lambda: command("display-message", "-p", "-t", "dopamine:", "#{pane_id}") == first, "Alt+2 failed")
             assert command("display-message", "-p", "-t", first, "#{pane_pid}") == first_pid
             wait_for(lambda: rail_is_fixed(first), "switching from fullscreen Dashboard left the rail expanded")
             resize(100, 30)
@@ -306,7 +306,7 @@ for line in sys.stdin:
             updated_shim = tools / "dopamine-updated"
             updated_shim.write_bytes(shim.read_bytes())
             updated_shim.chmod(0o755)
-            env["PROJECT_HUB_EXECUTABLE"] = str(updated_shim)
+            env["DOPAMINE_EXECUTABLE"] = str(updated_shim)
             process = connect()
             wait_for(lambda: overview() and command("display-message", "-p", "-t", dashboard, "#{pane_pid}") != dashboard_pid, "interface update/reattach failed")
             key(b"j")
@@ -320,14 +320,14 @@ for line in sys.stdin:
             key(b"\x17")
             wait_for(lambda: b"close this workspace?" in output[before_prompt:], "close confirmation missing after update")
             key(b"\r")
-            wait_for(lambda: len(command("list-windows", "-t", "project-hub", "-F", "#{window_id}").splitlines()) == 2, "confirmed workspace did not close")
+            wait_for(lambda: len(command("list-windows", "-t", "dopamine", "-F", "#{window_id}").splitlines()) == 2, "confirmed workspace did not close")
             assert command("display-message", "-p", "-t", first, "#{pane_pid}") == first_pid
-            missing_slot_is_ignored(3, command("display-message", "-p", "-t", "project-hub:", "#{pane_id}"))
+            missing_slot_is_ignored(3, command("display-message", "-p", "-t", "dopamine:", "#{pane_id}"))
             key(b"\x1b1")
             wait_for(lambda: overview(), "dashboard unavailable after closing workspace")
             key(b"q")
             process.wait(timeout=5)
-            wait_for(lambda: dashboard not in command("list-panes", "-s", "-t", "project-hub", "-F", "#{pane_id}").splitlines(), "q left the interface running")
+            wait_for(lambda: dashboard not in command("list-panes", "-s", "-t", "dopamine", "-F", "#{pane_id}").splitlines(), "q left the interface running")
             assert command("display-message", "-p", "-t", first, "#{pane_pid}") == first_pid
             expect_notification(first, "question", 2)
             expect_notification(first, "done", 2)
@@ -335,9 +335,9 @@ for line in sys.stdin:
             subprocess.run([str(updated_shim), "slot", "1"], env=env, check=True)
             process = connect()
             wait_for(lambda: overview(), "Dashboard could not reopen after Exit")
-            dashboard = command("display-message", "-p", "-t", "project-hub:", "#{pane_id}")
+            dashboard = command("display-message", "-p", "-t", "dopamine:", "#{pane_id}")
             key(b"\x1b2")
-            wait_for(lambda: command("display-message", "-p", "-t", "project-hub:", "#{pane_id}") == first, "workspace number changed after Exit")
+            wait_for(lambda: command("display-message", "-p", "-t", "dopamine:", "#{pane_id}") == first, "workspace number changed after Exit")
             key(b"\x1b1")
             wait_for(lambda: overview(), "Dashboard slot 1 was not preserved")
 
@@ -345,8 +345,8 @@ for line in sys.stdin:
             key(b"\r")
             wait_for(lambda: "new codex session" in screen(), "project menu unavailable for terminal")
             key(b"t")
-            wait_for(lambda: command("display-message", "-p", "-t", "project-hub:", "#{@project_hub_kind}") == "shell", "project terminal did not open")
-            project_shell = command("display-message", "-p", "-t", "project-hub:", "#{pane_id}")
+            wait_for(lambda: command("display-message", "-p", "-t", "dopamine:", "#{@dopamine_kind}") == "shell", "project terminal did not open")
+            project_shell = command("display-message", "-p", "-t", "dopamine:", "#{pane_id}")
             project_shell_pid = command("display-message", "-p", "-t", project_shell, "#{pane_pid}")
             wait_for(lambda: command("display-message", "-p", "-t", project_shell, "#{pane_current_path}") == str(project), "project shell started in wrong directory")
             wait_for(lambda: rail_is_fixed(project_shell), "shell rail was not configured")
@@ -356,8 +356,8 @@ for line in sys.stdin:
             key(b"jj")
             wait_for(lambda: "> new terminal" in screen(), "global terminal action unavailable")
             key(b"\r")
-            wait_for(lambda: command("display-message", "-p", "-t", "project-hub:", "#{@project_hub_kind}") == "shell" and command("display-message", "-p", "-t", "project-hub:", "#{pane_id}") != project_shell, "independent home terminal did not open")
-            home_shell = command("display-message", "-p", "-t", "project-hub:", "#{pane_id}")
+            wait_for(lambda: command("display-message", "-p", "-t", "dopamine:", "#{@dopamine_kind}") == "shell" and command("display-message", "-p", "-t", "dopamine:", "#{pane_id}") != project_shell, "independent home terminal did not open")
+            home_shell = command("display-message", "-p", "-t", "dopamine:", "#{pane_id}")
             home_pid = command("display-message", "-p", "-t", home_shell, "#{pane_pid}")
             wait_for(lambda: command("display-message", "-p", "-t", home_shell, "#{pane_current_path}") == str(root), "global terminal did not start in home")
             key(("printf 'native shell works' > " + shlex.quote(str(root / "shell-result")) + "\r").encode())
@@ -367,11 +367,11 @@ for line in sys.stdin:
             command("detach-client")
             process.wait(timeout=5)
             process = connect()
-            wait_for(lambda: command("display-message", "-p", "-t", "project-hub:", "#{pane_id}") == dashboard and "new terminal" in screen() and command("list-clients", "-F", "#{client_session}") == "project-hub", "Dashboard did not reopen with live shells")
+            wait_for(lambda: command("display-message", "-p", "-t", "dopamine:", "#{pane_id}") == dashboard and "new terminal" in screen() and command("list-clients", "-F", "#{client_session}") == "dopamine", "Dashboard did not reopen with live shells")
             assert command("display-message", "-p", "-t", home_shell, "#{pane_pid}") == home_pid
             assert command("display-message", "-p", "-t", project_shell, "#{pane_pid}") == project_shell_pid
             key(b"\x1b4")
-            wait_for(lambda: command("display-message", "-p", "-t", "project-hub:", "#{pane_id}") == home_shell, "home terminal lost its slot")
+            wait_for(lambda: command("display-message", "-p", "-t", "dopamine:", "#{pane_id}") == home_shell, "home terminal lost its slot")
             wait_for(lambda: rail_is_fixed(home_shell), "home shell rail changed after reattach")
             key(b"\x1b1")
             wait_for(lambda: "new terminal" in screen() and "new codex session" not in screen(), "Dashboard unavailable for folder addition")
@@ -392,8 +392,8 @@ for line in sys.stdin:
             key(b"\r")
             wait_for(lambda: "remove from list" in screen(), "external folder has no remove action")
             key(b"t")
-            wait_for(lambda: command("display-message", "-p", "-t", "project-hub:", "#{pane_current_path}") == str(external), "terminal in external folder failed")
-            external_shell = command("display-message", "-p", "-t", "project-hub:", "#{pane_id}")
+            wait_for(lambda: command("display-message", "-p", "-t", "dopamine:", "#{pane_current_path}") == str(external), "terminal in external folder failed")
+            external_shell = command("display-message", "-p", "-t", "dopamine:", "#{pane_id}")
             external_pid = command("display-message", "-p", "-t", external_shell, "#{pane_pid}")
             key(b"\x1b1")
             wait_for(lambda: "> quite external 123" in screen(), "external folder selection was lost")
@@ -409,11 +409,11 @@ for line in sys.stdin:
             assert external.is_dir() and len(json.loads((config / "projects.json").read_text())["projects"]) == 2
             assert command("display-message", "-p", "-t", external_shell, "#{pane_pid}") == external_pid
             command("send-keys", "-t", external_shell, "exit", "Enter")
-            wait_for(lambda: external_shell not in command("list-panes", "-s", "-t", "project-hub", "-F", "#{pane_id}").splitlines(), "exit left an orphan shell rail")
+            wait_for(lambda: external_shell not in command("list-panes", "-s", "-t", "dopamine", "-F", "#{pane_id}").splitlines(), "exit left an orphan shell rail")
             command("send-keys", "-t", project_shell, "exit", "Enter")
-            wait_for(lambda: project_shell not in command("list-panes", "-s", "-t", "project-hub", "-F", "#{pane_id}").splitlines(), "exiting project shell failed")
+            wait_for(lambda: project_shell not in command("list-panes", "-s", "-t", "dopamine", "-F", "#{pane_id}").splitlines(), "exiting project shell failed")
             key(b"\x1b3")
-            wait_for(lambda: command("display-message", "-p", "-t", "project-hub:", "#{pane_id}") == home_shell, "shell slot did not renumber")
+            wait_for(lambda: command("display-message", "-p", "-t", "dopamine:", "#{pane_id}") == home_shell, "shell slot did not renumber")
             before_prompt = len(output)
             key(b"\x17")
             wait_for(lambda: b"terminal is running." in output[before_prompt:], "shell close confirmation missing")
@@ -424,7 +424,7 @@ for line in sys.stdin:
             key(b"\x17")
             wait_for(lambda: b"close this workspace?" in output[before_prompt:], "shell close confirmation missing on retry")
             key(b"\r")
-            wait_for(lambda: home_shell not in command("list-panes", "-s", "-t", "project-hub", "-F", "#{pane_id}").splitlines(), "confirmed shell close failed")
+            wait_for(lambda: home_shell not in command("list-panes", "-s", "-t", "dopamine", "-F", "#{pane_id}").splitlines(), "confirmed shell close failed")
             key(b"\x1b1")
             wait_for(lambda: "new terminal" in screen() and "new codex session" not in screen(), "Dashboard unavailable after closing shells")
             key(b"q")

@@ -1,4 +1,4 @@
-package projecthub
+package workspace
 
 import (
 	"encoding/json"
@@ -80,14 +80,14 @@ func (s Service) startDetached(p Project, kind string) (r Record, err error) {
 	env := s.paneEnvironment(p.ID)
 	// Pass identity after vpn-run, whose existing environment allowlist is kept.
 	if kind == "app" {
-		args = append([]string{"env", "PROJECT_HUB_APP_TOKEN=" + token}, args...)
+		args = append([]string{"env", "DOPAMINE_APP_TOKEN=" + token}, args...)
 	}
 	if p.LaunchVPN {
 		args = append([]string{"/run/current-system/sw/bin/vpn-run"}, args...)
 	}
 	args = append(env, args...)
-	name := "hub-" + kind + "-" + shortHash(s.StateDir+key) + "-" + token[:6]
-	gate := "project-hub-" + token
+	name := "dopamine-" + kind + "-" + shortHash(s.StateDir+key) + "-" + token[:6]
+	gate := "dopamine-" + token
 	out, err := tmux("new-session", "-d", "-P", "-F", "#{session_id}|#{session_name}:#{window_index}.#{pane_index}|#{pane_id}|#{pane_pid}|#{socket_path}", "-s", name, "-n", kind, "-c", p.Path, "tmux wait-for "+Quote(gate)+"; exec "+ShellArgs(args))
 	if err != nil {
 		return r, err
@@ -115,8 +115,8 @@ func (s Service) startDetached(p Project, kind string) (r Record, err error) {
 	}
 	log.Close()
 	options := [][]string{
-		{"set-option", "-p", "-t", r.Pane, "@project_hub_token", token},
-		{"set-option", "-t", r.Session, "@project_hub_token", token},
+		{"set-option", "-p", "-t", r.Pane, "@dopamine_token", token},
+		{"set-option", "-t", r.Session, "@dopamine_token", token},
 		{"set-option", "-t", r.Session, "destroy-unattached", "off"},
 		{"set-option", "-t", r.Session, "history-limit", "50000"},
 		{"set-option", "-w", "-t", r.Pane, "remain-on-exit", "off"},
@@ -148,7 +148,7 @@ func (s Service) probe(p Project) error {
 }
 
 // Application state is independent of Codex. Polling also reconciles legacy
-// records and a missed exit hook after a Hub restart; saved Running is no proof.
+// records and a missed exit hook after a dopamine restart; saved Running is no proof.
 func (s Service) AppStatuses(projects []Project) map[string]AppStatus {
 	out := make(map[string]AppStatus, len(projects))
 	for _, p := range projects {
@@ -260,7 +260,7 @@ func (s Service) StopApp(p Project) error {
 		return err
 	}
 	// Ctrl+C reaches the pane's foreground group, including the existing VPN
-	// wrapper, without signalling the Hub or any tmux client.
+	// wrapper, without signalling the dopamine or any tmux client.
 	if liveRecord(r) {
 		_, _ = recordTmux(r, "send-keys", "-t", r.Pane, "C-c")
 	}
@@ -284,7 +284,7 @@ func (s Service) finishApp(r Record) error {
 	if applicationProcessAlive(r) {
 		return errors.New("application process still alive; refusing exit cleanup")
 	}
-	out, e := recordTmux(r, "display-message", "-p", "-t", r.Pane, "#{@project_hub_token}|#{pane_dead}|#{pane_dead_status}|#{pane_dead_signal}")
+	out, e := recordTmux(r, "display-message", "-p", "-t", r.Pane, "#{@dopamine_token}|#{pane_dead}|#{pane_dead_status}|#{pane_dead_signal}")
 	f := strings.Split(out, "|")
 	if e == nil && len(f) == 4 && f[0] == r.Token {
 		if f[1] != "1" {
@@ -316,7 +316,7 @@ func (s Service) finishApp(r Record) error {
 	}
 	// Exact session ID plus instance token; never kill a shared legacy session.
 	if r.Session != "" {
-		token, err := recordTmux(r, "show-options", "-v", "-t", r.Session, "@project_hub_token")
+		token, err := recordTmux(r, "show-options", "-v", "-t", r.Session, "@dopamine_token")
 		if err == nil && token == r.Token {
 			_, err = recordTmux(r, "kill-session", "-t", r.Session)
 			return err
@@ -374,7 +374,7 @@ func ownedAppPID(r Record, pid int) bool {
 		return true
 	}
 	b, _ := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid))
-	return strings.Contains("\x00"+string(b), "\x00PROJECT_HUB_APP_TOKEN="+r.Token+"\x00")
+	return strings.Contains("\x00"+string(b), "\x00DOPAMINE_APP_TOKEN="+r.Token+"\x00")
 }
 func appPIDs(r Record) []int {
 	entries, _ := os.ReadDir("/proc")
@@ -452,6 +452,6 @@ func OpenRecordTerminal(p Project, r Record) error {
 	if err != nil {
 		return err
 	}
-	_, err = command("kitty", "--detach", "--title", "Project Hub · "+p.Name, "--directory", p.Path, "env", "-u", "TMUX", "-u", "TMUX_PANE", "tmux", "-S", socket, "attach-session", "-t", current.Target)
+	_, err = command("kitty", "--detach", "--title", "dopamine · "+p.Name, "--directory", p.Path, "env", "-u", "TMUX", "-u", "TMUX_PANE", "tmux", "-S", socket, "attach-session", "-t", current.Target)
 	return err
 }

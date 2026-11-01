@@ -8,7 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/dr6m6/dopamine/internal/projecthub"
+	"github.com/dr6m6/dopamine/internal/workspace"
 )
 
 func TestGlobalActionsHaveGapAndRemainVisibleWithLongLists(t *testing.T) {
@@ -16,7 +16,7 @@ func TestGlobalActionsHaveGapAndRemainVisibleWithLongLists(t *testing.T) {
 		m := dashboardFixture()
 		m.height = height
 		for range 30 {
-			m.projects = append(m.projects, projecthub.Project{ID: "last", Name: "Last project"})
+			m.projects = append(m.projects, workspace.Project{ID: "last", Name: "Last project"})
 		}
 		m.project = len(m.projects) + 1
 		view := ansi.Strip(m.dashboard(70))
@@ -72,7 +72,7 @@ func TestFolderInputSavesSelectsAndRemovesOnlyRegistration(t *testing.T) {
 	if err := os.Mkdir(path, 0700); err != nil {
 		t.Fatal(err)
 	}
-	s := projecthub.Service{Home: root, ConfigDir: filepath.Join(root, "config"), StateDir: filepath.Join(root, "state"), ProjectsRoot: filepath.Join(root, "projects")}
+	s := workspace.Service{Home: root, ConfigDir: filepath.Join(root, "config"), StateDir: filepath.Join(root, "state"), ProjectsRoot: filepath.Join(root, "projects")}
 	m := New(s, false, "")
 	m.ready, m.addingFolder = true, true
 	m.folderInput.SetValue(path)
@@ -113,7 +113,7 @@ func TestRefreshPreservesGlobalSelectionAndFolderDraft(t *testing.T) {
 	m.project = len(m.projects) + 1
 	m.addingFolder = true
 	m.folderInput.SetValue("~/draft123")
-	projects := append(m.projects, projecthub.Project{ID: "new", Name: "New"})
+	projects := append(m.projects, workspace.Project{ID: "new", Name: "New"})
 	updated, _ := m.Update(loaded{projects: projects})
 	m = updated.(Model)
 	if m.project != len(projects)+1 || !m.addingFolder || m.folderInput.Value() != "~/draft123" {

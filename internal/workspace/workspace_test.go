@@ -1,4 +1,4 @@
-package projecthub
+package workspace
 
 import (
 	"database/sql"
@@ -218,7 +218,7 @@ func TestProjectSkillsNeverFollowGlobalDirectorySymlinks(t *testing.T) {
 }
 
 func TestOfficialInstallerProjectOnlyAndRollback(t *testing.T) {
-	raw := os.Getenv("PROJECT_HUB_INSTALL_TEST_URL")
+	raw := os.Getenv("DOPAMINE_INSTALL_TEST_URL")
 	if raw == "" {
 		t.Skip("optional single-skill network smoke, project scope only")
 	}
@@ -239,7 +239,7 @@ func TestOfficialInstallerProjectOnlyAndRollback(t *testing.T) {
 	if _, err := os.Stat(file); !os.IsNotExist(err) {
 		t.Fatal("rollback did not remove project registration", err)
 	}
-	backups, _ := filepath.Glob(filepath.Join(p.Path, ".agents/project-hub-skill-backups/*/SKILL.md"))
+	backups, _ := filepath.Glob(filepath.Join(p.Path, ".agents/dopamine-skill-backups/*/SKILL.md"))
 	if len(backups) != 1 {
 		t.Fatal("source not preserved in rollback backup", backups)
 	}
@@ -300,7 +300,7 @@ func TestConcurrentProjectLaunchHasOneProcessAndRetainsLog(t *testing.T) {
 		t.Fatal("private log permissions", st, err)
 	}
 	// A reused target with a different token is never accepted as our process.
-	if _, err = tmux("set-option", "-p", "-t", first.Pane, "@project_hub_token", "different"); err != nil {
+	if _, err = tmux("set-option", "-p", "-t", first.Pane, "@dopamine_token", "different"); err != nil {
 		t.Fatal(err)
 	}
 	if liveRecord(first) {
@@ -309,18 +309,18 @@ func TestConcurrentProjectLaunchHasOneProcessAndRetainsLog(t *testing.T) {
 }
 
 func TestNativeMetadataProtocol(t *testing.T) {
-	if os.Getenv("PROJECT_HUB_NATIVE_TESTS") != "1" {
+	if os.Getenv("DOPAMINE_NATIVE_TESTS") != "1" {
 		t.Skip("requires installed Codex VPN launcher; opt-in metadata-only smoke")
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	flags, err := effectiveSkillFlags(cwd, []string{"-c", `skills.config=[{path="/tmp/project-hub-synthetic/SKILL.md",enabled=false}]`})
+	flags, err := effectiveSkillFlags(cwd, []string{"-c", `skills.config=[{path="/tmp/dopamine-synthetic/SKILL.md",enabled=false}]`})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if enabled, exists := flags["/tmp/project-hub-synthetic/SKILL.md"]; !exists || enabled {
+	if enabled, exists := flags["/tmp/dopamine-synthetic/SKILL.md"]; !exists || enabled {
 		t.Fatal("effective config did not retain disable", flags)
 	}
 	raw, err := nativeRPC(cwd, "skills/list", map[string]any{"cwds": []string{cwd}, "forceReload": true}, nil)
@@ -362,7 +362,7 @@ func TestCompletedWorktreeRemainsAssignedToProject(t *testing.T) {
 	if len(ForProject(all, p)) != 1 {
 		t.Fatal("completed worktree lost its project", all)
 	}
-	t.Setenv("PROJECT_HUB_PROJECT_ID", p.ID)
+	t.Setenv("DOPAMINE_PROJECT_ID", p.ID)
 	t.Chdir(p.Path)
 	if err = s.ToggleSkill(p, Skill{Path: "missing"}); err == nil {
 		t.Fatal("uninstalled skill policy accepted")
@@ -373,17 +373,17 @@ func TestDashboardReopensOnExistingServerWithExplicitEnvironment(t *testing.T) {
 	isolatedTmux(t)
 	s, p := fixture(t)
 	marker := filepath.Join(p.Path, "dashboard-env")
-	// Start a server before supplying Hub-specific environment, as happens
+	// Start a server before supplying dopamine-specific environment, as happens
 	// when users already have unrelated tmux sessions.
 	if _, err := tmux("new-session", "-d", "-s", "unrelated"); err != nil {
 		t.Fatal(err)
 	}
 	s.Executable = filepath.Join(p.Path, "dashboard-fixture")
-	write(t, s.Executable, "#!/bin/sh\nprintf '%s|%s' \"$PROJECT_HUB_TUI\" \"$PROJECT_HUB_STATE_DIR\" > "+Quote(marker)+"\nexec sleep 30\n")
+	write(t, s.Executable, "#!/bin/sh\nprintf '%s|%s' \"$DOPAMINE_TUI\" \"$DOPAMINE_STATE_DIR\" > "+Quote(marker)+"\nexec sleep 30\n")
 	if err := os.Chmod(s.Executable, 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PROJECT_HUB_STATE_DIR", s.StateDir)
+	t.Setenv("DOPAMINE_STATE_DIR", s.StateDir)
 	first, err := s.EnsureDashboard()
 	if err != nil {
 		t.Fatal(err)
@@ -403,7 +403,7 @@ func TestDashboardReopensOnExistingServerWithExplicitEnvironment(t *testing.T) {
 		t.Fatal("duplicate dashboard", first, second, err)
 	}
 	// Keep a second window alive while the dashboard exits.
-	if _, err = tmux("new-window", "-d", "-t", "project-hub:", "sleep 30"); err != nil {
+	if _, err = tmux("new-window", "-d", "-t", "dopamine:", "sleep 30"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = tmux("kill-window", "-t", first); err != nil {

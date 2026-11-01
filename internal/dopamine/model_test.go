@@ -10,15 +10,15 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/dr6m6/dopamine/internal/projecthub"
+	"github.com/dr6m6/dopamine/internal/workspace"
 )
 
 func dashboardFixture() Model {
-	m := New(projecthub.Service{}, false, "")
+	m := New(workspace.Service{}, false, "")
 	m.ready = true
-	m.projects = []projecthub.Project{{ID: "one", Name: "First", Path: "/tmp/first"}, {ID: "two", Name: "Second", Path: "/tmp/second"}}
-	m.apps = map[string]projecthub.AppStatus{"one": {State: projecthub.Stopped}}
-	m.slots = []projecthub.Slot{{Dashboard: true}, {Window: "@2"}}
+	m.projects = []workspace.Project{{ID: "one", Name: "First", Path: "/tmp/first"}, {ID: "two", Name: "Second", Path: "/tmp/second"}}
+	m.apps = map[string]workspace.AppStatus{"one": {State: workspace.Stopped}}
+	m.slots = []workspace.Slot{{Dashboard: true}, {Window: "@2"}}
 	return m
 }
 
@@ -60,7 +60,7 @@ func TestViewKeepsActionsAndNumberedRailInsideTerminal(t *testing.T) {
 		m := dashboardFixture()
 		m.width, m.height = size[0], size[1]
 		for i := 0; i < 40; i++ {
-			m.projects = append(m.projects, projecthub.Project{ID: fmt.Sprint(i), Name: "Длинное имя проекта", Path: "/tmp/long"})
+			m.projects = append(m.projects, workspace.Project{ID: fmt.Sprint(i), Name: "Длинное имя проекта", Path: "/tmp/long"})
 		}
 		m.project = len(m.projects) - 1
 		view := m.View()
@@ -122,10 +122,10 @@ func TestMoleculeHasNoLettersAndRailScrollsPastNine(t *testing.T) {
 	if strings.IndexFunc(Molecule, unicode.IsLetter) >= 0 {
 		t.Fatal("molecule must not contain chemical labels")
 	}
-	m := New(projecthub.Service{}, true, "@20")
+	m := New(workspace.Service{}, true, "@20")
 	m.height = 12
 	for i := 0; i < 20; i++ {
-		m.slots = append(m.slots, projecthub.Slot{Window: fmt.Sprintf("@%d", i+1)})
+		m.slots = append(m.slots, workspace.Slot{Window: fmt.Sprintf("@%d", i+1)})
 	}
 	if !strings.Contains(ansi.Strip(m.rail()), "20") || m.railOffset() == 0 {
 		t.Fatal("active workspace beyond 9 is not visible")
@@ -137,7 +137,7 @@ func TestDashboardAlignsRailAndServerStatusAndHidesHelp(t *testing.T) {
 	m.projects[0].Launch = []string{"first-server"}
 	m.projects[1].Launch = []string{"second-server"}
 	m.projects[1].Name = "Longer project name"
-	m.apps["two"] = projecthub.AppStatus{State: projecthub.Stopped}
+	m.apps["two"] = workspace.AppStatus{State: workspace.Stopped}
 	view := ansi.Strip(m.View().Content)
 	columns := []int{}
 	for _, line := range strings.Split(view, "\n") {
@@ -172,7 +172,7 @@ func TestServerStatusRequiresLaunchCommand(t *testing.T) {
 	m.projects[0].Launch = []string{"first-server"}
 	m.projects[1].AppURL = "http://localhost:8080/"
 	// A URL alone or a stale app record must not label an unconfigured server.
-	m.apps["two"] = projecthub.AppStatus{State: projecthub.Running}
+	m.apps["two"] = workspace.AppStatus{State: workspace.Running}
 	view := ansi.Strip(m.View().Content)
 	for _, line := range strings.Split(view, "\n") {
 		if strings.Contains(line, "First") && !strings.Contains(line, "stopped") {
@@ -188,7 +188,7 @@ func TestLoadedProjectsGroupConfiguredServersAndKeepSelection(t *testing.T) {
 	m := dashboardFixture()
 	m.project = 1
 	m.projectOpen = true
-	projects := []projecthub.Project{
+	projects := []workspace.Project{
 		{ID: "one", Name: "First"},
 		{ID: "z", Name: "Zulu", Launch: []string{"z-server"}},
 		{ID: "two", Name: "Second", AppURL: "http://localhost:8080/"},

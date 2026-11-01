@@ -1,4 +1,4 @@
-package projecthub
+package workspace
 
 import (
 	"context"
@@ -9,13 +9,13 @@ import (
 )
 
 func TestDefaultProjectsRootAndOverride(t *testing.T) {
-	t.Setenv("PROJECT_HUB_PROJECTS_ROOT", "")
+	t.Setenv("DOPAMINE_PROJECTS_ROOT", "")
 	s := Default()
 	if s.ProjectsRoot != filepath.Join(s.Home, "projects") {
 		t.Fatalf("unexpected default discovery root: %s", s.ProjectsRoot)
 	}
 	custom := t.TempDir()
-	t.Setenv("PROJECT_HUB_PROJECTS_ROOT", custom)
+	t.Setenv("DOPAMINE_PROJECTS_ROOT", custom)
 	if got := Default().ProjectsRoot; got != custom {
 		t.Fatalf("custom discovery root ignored: %s", got)
 	}

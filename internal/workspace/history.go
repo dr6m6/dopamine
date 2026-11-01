@@ -1,4 +1,4 @@
-package projecthub
+package workspace
 
 import (
 	"database/sql"

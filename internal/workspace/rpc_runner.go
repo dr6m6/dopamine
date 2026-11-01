@@ -1,4 +1,4 @@
-package projecthub
+package workspace
 
 import (
 	"bufio"
@@ -74,7 +74,7 @@ func (execMetadataRunner) Call(cwd, method string, params any, overrides []strin
 		}
 		return nil, fmt.Errorf("Codex metadata protocol ended: %v", scan.Err())
 	}
-	if _, err = call(1, "initialize", map[string]any{"clientInfo": map[string]string{"name": "project_hub", "version": "0.1.0"}}); err != nil {
+	if _, err = call(1, "initialize", map[string]any{"clientInfo": map[string]string{"name": "dopamine", "version": "0.1.0"}}); err != nil {
 		return nil, err
 	}
 	if err = enc.Encode(map[string]any{"method": "initialized"}); err != nil {

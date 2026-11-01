@@ -4,7 +4,7 @@
   outputs = { self, nixpkgs }: let
     system = "x86_64-linux";
     pkgs = import nixpkgs { inherit system; };
-    hub = pkgs.buildGoModule {
+    dopamine = pkgs.buildGoModule {
       pname = "dopamine";
       version = "0.1.0";
       src = pkgs.lib.cleanSourceWith {
@@ -22,24 +22,21 @@
       # isolated tmux interaction scenario without model API calls.
       checkPhase = ''
         go test ./...
-        python3 -m unittest discover -s scripts -p 'test_project_hub_source.py'
-        python3 -m unittest discover -s scripts -p 'test_dopamine_install.py'
+        python3 -m unittest discover -s scripts -p 'test_*.py'
       '';
       postInstall = ''
-        wrapProgram "$out/bin/dopamine" --set PROJECT_HUB_EXECUTABLE "$out/bin/dopamine" --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.tmux pkgs.git pkgs.xdg-utils pkgs.libnotify pkgs.python3 pkgs.nodejs pkgs.coreutils pkgs.bash ]}
-        ln -s dopamine "$out/bin/project-hub"
+        wrapProgram "$out/bin/dopamine" --set DOPAMINE_EXECUTABLE "$out/bin/dopamine" --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.tmux pkgs.git pkgs.xdg-utils pkgs.libnotify pkgs.python3 pkgs.nodejs pkgs.coreutils pkgs.bash ]}
         install -Dm644 LICENSE "$out/share/licenses/dopamine/LICENSE"
-        install -Dm644 internal/projecthub/assets/dopamine.svg "$out/share/icons/hicolor/scalable/apps/dopamine.svg"
+        install -Dm644 internal/workspace/assets/dopamine.svg "$out/share/icons/hicolor/scalable/apps/dopamine.svg"
       '';
       meta = { license = pkgs.lib.licenses.mit; platforms = [ system ]; mainProgram = "dopamine"; };
     };
   in {
-    packages.${system} = { default = hub; dopamine = hub; project-hub = hub; };
-    apps.${system}.default = { type = "app"; program = "${hub}/bin/dopamine"; meta.description = "dopamine terminal workspaces"; };
+    packages.${system} = { default = dopamine; dopamine = dopamine; };
+    apps.${system}.default = { type = "app"; program = "${dopamine}/bin/dopamine"; meta.description = "dopamine terminal workspaces"; };
     devShells.${system}.default = pkgs.mkShell { packages = [ pkgs.go_1_26 pkgs.tmux pkgs.git pkgs.libnotify pkgs.nodejs pkgs.python3 pkgs.gnumake ]; };
-    checks.${system}.package = hub;
+    checks.${system}.package = dopamine;
     nixosModules.default = { config, lib, pkgs, ... }: let cfg = config.programs.dopamine; in {
-      imports = [ (lib.mkAliasOptionModule [ "programs" "project-hub" "enable" ] [ "programs" "dopamine" "enable" ]) ];
       options.programs.dopamine.enable = lib.mkEnableOption "dopamine (uses existing codex-vpn)";
       config = lib.mkIf cfg.enable { environment.systemPackages = [ self.packages.${pkgs.stdenv.hostPlatform.system}.default ]; };
     };

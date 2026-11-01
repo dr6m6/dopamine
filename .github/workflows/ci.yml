@@ -26,11 +26,11 @@ jobs:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Check formatting
         run: |
-          nix develop path:. -c bash -euc 'test -z "$(gofmt -l cmd/dopamine internal/dopamine internal/projecthub)"'
+          nix develop path:. -c bash -euc 'test -z "$(gofmt -l cmd/dopamine internal/dopamine internal/workspace)"'
       - name: Vet
-        run: nix develop path:. -c go vet ./cmd/dopamine ./internal/dopamine ./internal/projecthub
+        run: nix develop path:. -c go vet ./cmd/dopamine ./internal/dopamine ./internal/workspace
       - name: Race detector
-        run: nix develop path:. -c go test -race ./cmd/dopamine ./internal/dopamine ./internal/projecthub
+        run: nix develop path:. -c go test -race ./cmd/dopamine ./internal/dopamine ./internal/workspace
       - name: Build, installer tests and isolated terminal scenarios
         run: nix develop path:. -c make test-dopamine
       - name: Build installable Nix package

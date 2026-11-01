@@ -8,13 +8,13 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/dr6m6/dopamine/internal/projecthub"
+	"github.com/dr6m6/dopamine/internal/workspace"
 )
 
 func TestNotificationRowNavigatesTogglesAndPreservesSelectionOnRefresh(t *testing.T) {
 	m := dashboardFixture()
 	root := t.TempDir()
-	m.service = projecthub.Service{ConfigDir: filepath.Join(root, "config"), StateDir: filepath.Join(root, "state")}
+	m.service = workspace.Service{ConfigDir: filepath.Join(root, "config"), StateDir: filepath.Join(root, "state")}
 	m.project = len(m.projects) + 1
 	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	m = updated.(Model)
@@ -34,7 +34,7 @@ func TestNotificationRowNavigatesTogglesAndPreservesSelectionOnRefresh(t *testin
 	if !m.notificationsMuted || m.busy || !strings.Contains(ansi.Strip(m.dashboard(70)), "> notifications: off") {
 		t.Fatal("row did not reflect saved mute state", m.status)
 	}
-	projects := append(m.projects, projecthub.Project{ID: "new", Name: "New"})
+	projects := append(m.projects, workspace.Project{ID: "new", Name: "New"})
 	updated, _ = m.Update(loaded{projects: projects, notificationsMuted: true})
 	m = updated.(Model)
 	if m.project != len(projects)+2 || !m.notificationsMuted {

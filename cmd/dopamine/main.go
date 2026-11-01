@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/dr6m6/dopamine/internal/dopamine"
-	"github.com/dr6m6/dopamine/internal/projecthub"
+	"github.com/dr6m6/dopamine/internal/workspace"
 )
 
 var Version = "dev"
@@ -23,7 +23,7 @@ func main() {
 }
 
 func run(args []string) error {
-	s := projecthub.Default()
+	s := workspace.Default()
 	if len(args) > 0 {
 		switch args[0] {
 		case "--help", "-h":
@@ -57,9 +57,9 @@ func run(args []string) error {
 			}
 		case "probe-app":
 			if len(args) == 2 {
-				return projecthub.ProbeApp(args[1])
+				return workspace.ProbeApp(args[1])
 			}
-		case "kill-hub":
+		case "kill-dopamine":
 			return s.KillDashboard()
 		case "sidebar":
 			return dopamine.Run(s, true)
@@ -80,7 +80,7 @@ func run(args []string) error {
 		}
 		return fmt.Errorf("unknown command or arguments; run dopamine --help")
 	}
-	if os.Getenv("PROJECT_HUB_TUI") == "1" {
+	if os.Getenv("DOPAMINE_TUI") == "1" {
 		return dopamine.Run(s, false)
 	}
 	if _, err := os.Stat(s.RegistryPath()); os.IsNotExist(err) {
@@ -88,7 +88,7 @@ func run(args []string) error {
 			return err
 		}
 	}
-	os.Setenv("PROJECT_HUB_EXECUTABLE", s.Executable)
+	os.Setenv("DOPAMINE_EXECUTABLE", s.Executable)
 	target, err := s.EnsureDashboard()
 	if err != nil {
 		return err
@@ -97,7 +97,7 @@ func run(args []string) error {
 		return err
 	}
 	if os.Getenv("TMUX") != "" {
-		return projecthub.Jump(target)
+		return workspace.Jump(target)
 	}
 	if out, err := exec.Command("tmux", "select-window", "-t", strings.Split(target, ".")[0]).CombinedOutput(); err != nil {
 		return fmt.Errorf("select dashboard: %w: %s", err, out)
@@ -106,5 +106,5 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	return syscall.Exec(tmux, []string{tmux, "attach-session", "-t", "=project-hub"}, os.Environ())
+	return syscall.Exec(tmux, []string{tmux, "attach-session", "-t", "=dopamine"}, os.Environ())
 }

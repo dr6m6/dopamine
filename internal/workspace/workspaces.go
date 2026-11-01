@@ -1,4 +1,4 @@
-package projecthub
+package workspace
 
 import (
 	"os"
@@ -16,7 +16,7 @@ type Slot struct {
 }
 
 func (s Service) Slots() ([]Slot, error) {
-	out, err := tmux("list-panes", "-s", "-t", "=project-hub", "-F", "#{window_id}|#{pane_id}|#{@project_hub_role}|#{@project_hub_token}|#{pane_dead}")
+	out, err := tmux("list-panes", "-s", "-t", "=dopamine", "-F", "#{window_id}|#{pane_id}|#{@dopamine_role}|#{@dopamine_token}|#{pane_dead}")
 	if err != nil {
 		return nil, err
 	}
@@ -106,8 +106,8 @@ func (s Service) ConfigureDopamine() error {
 		return err
 	}
 	for _, option := range [][]string{
-		{"set-option", "-t", "project-hub", "status", "off"},
-		{"set-option", "-t", "project-hub", "mouse", "on"},
+		{"set-option", "-t", "dopamine", "status", "off"},
+		{"set-option", "-t", "dopamine", "mouse", "on"},
 	} {
 		if _, err = tmux(option...); err != nil {
 			return err
@@ -139,7 +139,7 @@ func (s Service) ConfigureDopamine() error {
 				return err
 			}
 		}
-		panes, err := tmux("list-panes", "-t", slot.Window, "-F", "#{pane_id}|#{@project_hub_role}|#{@dopamine_executable}|#{pane_dead}")
+		panes, err := tmux("list-panes", "-t", slot.Window, "-F", "#{pane_id}|#{@dopamine_role}|#{@dopamine_executable}|#{pane_dead}")
 		if err != nil {
 			return err
 		}
@@ -163,7 +163,7 @@ func (s Service) ConfigureDopamine() error {
 			}
 		}
 		for _, option := range [][]string{
-			{"set-option", "-p", "-t", rail, "@project_hub_role", "dopamine-rail"},
+			{"set-option", "-p", "-t", rail, "@dopamine_role", "dopamine-rail"},
 			{"set-option", "-p", "-t", rail, "@dopamine_executable", s.Executable},
 		} {
 			if _, err = tmux(option...); err != nil {
@@ -174,7 +174,7 @@ func (s Service) ConfigureDopamine() error {
 		// grows. Pin this window's rail after both real window resizes and
 		// layout changes (including mouse resizing). The width guard makes
 		// the resize's own layout notification a no-op.
-		pin := "if-shell -F -t " + rail + " " + Quote("#{&&:#{==:#{@project_hub_role},dopamine-rail},#{!=:#{pane_width},5}}") + " " + Quote("resize-pane -t "+rail+" -x 5")
+		pin := "if-shell -F -t " + rail + " " + Quote("#{&&:#{==:#{@dopamine_role},dopamine-rail},#{!=:#{pane_width},5}}") + " " + Quote("resize-pane -t "+rail+" -x 5")
 		for _, hook := range []string{"window-resized[1000]", "window-layout-changed[1000]"} {
 			// Indexed, window-local hooks retain other handlers and never
 			// change the user's global tmux configuration.
@@ -188,22 +188,22 @@ func (s Service) ConfigureDopamine() error {
 	}
 	for n := 1; n <= 9; n++ {
 		cmd := ShellArgs(append(s.paneEnvironment(""), s.Executable, "slot", strconv.Itoa(n)))
-		if _, err = tmux("bind-key", "-T", hubKeyTable, "M-"+strconv.Itoa(n), "run-shell", "-b", cmd); err != nil {
+		if _, err = tmux("bind-key", "-T", dopamineKeyTable, "M-"+strconv.Itoa(n), "run-shell", "-b", cmd); err != nil {
 			return err
 		}
 	}
 	for _, binding := range []struct{ key, direction string }{{"M-Left", "previous"}, {"M-Right", "next"}} {
 		cmd := ShellArgs(append(s.paneEnvironment(""), s.Executable, "slot", binding.direction))
-		if _, err = tmux("bind-key", "-T", hubKeyTable, binding.key, "run-shell", "-b", cmd); err != nil {
+		if _, err = tmux("bind-key", "-T", dopamineKeyTable, binding.key, "run-shell", "-b", cmd); err != nil {
 			return err
 		}
 	}
 	// Close only workspaces with Ctrl+w; Dashboard exits through its own q key.
-	liveCodex := "#{m:*1*,#{P:#{&&:#{!=:#{pane_dead},1},#{||:#{==:#{@project_hub_kind},codex},#{m:*codex*,#{pane_current_command}}}}}}"
-	liveShell := "#{m:*1*,#{P:#{&&:#{!=:#{pane_dead},1},#{==:#{@project_hub_kind},shell}}}}"
+	liveCodex := "#{m:*1*,#{P:#{&&:#{!=:#{pane_dead},1},#{||:#{==:#{@dopamine_kind},codex},#{m:*codex*,#{pane_current_command}}}}}}"
+	liveShell := "#{m:*1*,#{P:#{&&:#{!=:#{pane_dead},1},#{==:#{@dopamine_kind},shell}}}}"
 	closeShell := "if-shell -F " + Quote(liveShell) + " " + Quote("confirm-before -y -p "+Quote("terminal is running. close this workspace? enter: yes / esc: no")+" "+Quote("kill-window -t #{window_id}")) + " kill-window"
 	close := "if-shell -F " + Quote(liveCodex) + " " + Quote("confirm-before -y -p "+Quote("codex is running. close this workspace? enter: yes / esc: no")+" "+Quote("kill-window -t #{window_id}")) + " " + Quote(closeShell)
-	_, err = tmux("bind-key", "-T", hubKeyTable, "C-w", "if-shell", "-F", "#{!=:#{@project_hub_role},dashboard}", close)
+	_, err = tmux("bind-key", "-T", dopamineKeyTable, "C-w", "if-shell", "-F", "#{!=:#{@dopamine_role},dashboard}", close)
 	if err != nil {
 		return err
 	}

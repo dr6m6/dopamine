@@ -53,20 +53,20 @@ def main():
         (config / 'projects.json').write_text(json.dumps({'projects': registry}))
         env = os.environ.copy()
         env.update(HOME=temp, PATH=str(tools) + ':' + env['PATH'], SHELL=shutil.which('bash'),
-                   TERM='xterm-256color', COLORTERM='truecolor', PROJECT_HUB_TUI='1',
-                   PROJECT_HUB_EXECUTABLE=str(binary), PROJECT_HUB_CONFIG_DIR=str(config),
-                   PROJECT_HUB_STATE_DIR=str(root / 'state'), PROJECT_HUB_PROJECTS_ROOT=str(projects),
+                   TERM='xterm-256color', COLORTERM='truecolor', DOPAMINE_TUI='1',
+                   DOPAMINE_EXECUTABLE=str(binary), DOPAMINE_CONFIG_DIR=str(config),
+                   DOPAMINE_STATE_DIR=str(root / 'state'), DOPAMINE_PROJECTS_ROOT=str(projects),
                    CODEX_HOME=str(root / '.codex'), XDG_CONFIG_HOME=str(root / 'xdg-config'),
                    XDG_STATE_HOME=str(root / 'xdg-state'))
         for key in ('TMUX', 'TMUX_PANE', 'DBUS_SESSION_BUS_ADDRESS', 'DISPLAY', 'WAYLAND_DISPLAY',
-                    'PROJECT_HUB_DASHBOARD'):
+                    'DOPAMINE_DASHBOARD'):
             env.pop(key, None)
 
         def command(*parts):
             return subprocess.check_output(tmux + list(parts), env=env, text=True, stderr=subprocess.DEVNULL).rstrip('\n')
 
         def screen():
-            return command('capture-pane', '-p', '-t', 'project-hub:')
+            return command('capture-pane', '-p', '-t', 'dopamine:')
 
         def wait_for(check, message, timeout=15):
             deadline = time.monotonic() + timeout
@@ -79,36 +79,36 @@ def main():
                 time.sleep(0.1)
             raise RuntimeError(message + '\n' + screen())
 
-        def capture(name, target='project-hub:'):
+        def capture(name, target='dopamine:'):
             # Preserve cell positions and SGR styling, including the inverted slot.
             text = command('capture-pane', '-p', '-e', '-N', '-t', target)
             (output / (name + '.txt')).write_text('\n'.join(line.rstrip() for line in text.splitlines()) + '\n')
 
         try:
-            command('new-session', '-d', '-s', 'project-hub', '-x', '100', '-y', '28', str(binary))
-            command('set-option', '-t', 'project-hub', 'status', 'off')
-            command('set-option', '-p', '-t', 'project-hub:', '@project_hub_role', 'dashboard')
+            command('new-session', '-d', '-s', 'dopamine', '-x', '100', '-y', '28', str(binary))
+            command('set-option', '-t', 'dopamine', 'status', 'off')
+            command('set-option', '-p', '-t', 'dopamine:', '@dopamine_role', 'dashboard')
             wait_for(lambda: '> website' in screen() and 'notifications: on' in screen(), 'dashboard did not load')
-            command('send-keys', '-t', 'project-hub:', 'Enter')
+            command('send-keys', '-t', 'dopamine:', 'Enter')
             wait_for(lambda: 'new codex session' in screen(), 'project menu did not open')
-            command('send-keys', '-t', 'project-hub:', 's')
+            command('send-keys', '-t', 'dopamine:', 's')
             wait_for(lambda: 'server started' in screen(), 'demo server did not start')
-            command('send-keys', '-t', 'project-hub:', 'Escape')
+            command('send-keys', '-t', 'dopamine:', 'Escape')
             wait_for(lambda: 'running' in screen() and '> website' in screen(), 'server status did not refresh')
             capture('dashboard')
-            command('send-keys', '-t', 'project-hub:', 'Enter')
+            command('send-keys', '-t', 'dopamine:', 'Enter')
             wait_for(lambda: 'new codex session' in screen(), 'menu did not reopen')
             capture('project-menu')
-            command('send-keys', '-t', 'project-hub:', 't')
-            wait_for(lambda: command('display-message', '-p', '-t', 'project-hub:', '#{@project_hub_kind}') == 'shell', 'terminal did not open')
-            main_pane = command('display-message', '-p', '-t', 'project-hub:', '#{pane_id}')
+            command('send-keys', '-t', 'dopamine:', 't')
+            wait_for(lambda: command('display-message', '-p', '-t', 'dopamine:', '#{@dopamine_kind}') == 'shell', 'terminal did not open')
+            main_pane = command('display-message', '-p', '-t', 'dopamine:', '#{pane_id}')
             wait_for(lambda: '$' in screen(), 'shell prompt did not appear')
             command('send-keys', '-t', main_pane, 'clear', 'Enter')
             command('send-keys', '-t', main_pane, 'pwd', 'Enter')
             command('send-keys', '-t', main_pane, 'ls', 'Enter')
             wait_for(lambda: 'index.html' in screen(), 'demo terminal output did not appear')
-            wait_for(lambda: command('show-options', '-wv', '-t', 'project-hub:', 'pane-border-lines') == 'spaces', 'workspace border is visible')
-            rail = next(line.split('|')[0] for line in command('list-panes', '-t', 'project-hub:', '-F', '#{pane_id}|#{@project_hub_role}').splitlines() if line.endswith('|dopamine-rail'))
+            wait_for(lambda: command('show-options', '-wv', '-t', 'dopamine:', 'pane-border-lines') == 'spaces', 'workspace border is visible')
+            rail = next(line.split('|')[0] for line in command('list-panes', '-t', 'dopamine:', '-F', '#{pane_id}|#{@dopamine_role}').splitlines() if line.endswith('|dopamine-rail'))
             wait_for(lambda: '2' in command('capture-pane', '-p', '-t', rail), 'slot rail did not load')
             capture('terminal-main', main_pane)
             capture('terminal-rail', rail)
