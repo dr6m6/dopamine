@@ -1,0 +1,10 @@
+>_ OpenAI Codex (native fixture)
+
+Select Model and Effort
+GPT-6.1-Sol
+GPT-6.1-Terra
+
+Cloud  alt+f12 to cycle
+
+› Ask Codex to do anything
+GPT-6.1-Sol high · fixture

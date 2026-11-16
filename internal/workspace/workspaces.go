@@ -14,6 +14,8 @@ type Slot struct {
 	Key, Token            string
 	Dashboard, Exited     bool
 	CloudState            string
+	CloudHost             string
+	CloudBlocked          bool
 }
 
 func (s Service) Slots() ([]Slot, error) {
@@ -27,7 +29,7 @@ func (s Service) Slots() ([]Slot, error) {
 	}
 	byPane := make(map[string]Record)
 	for _, r := range records {
-		if r.Kind == "codex" || r.Kind == "shell" || r.Kind == "cloud" {
+		if r.Kind == "codex" || r.Kind == "shell" || r.Kind == "cloud" || r.Kind == NativeCloudKind {
 			byPane[r.Pane+"|"+r.Token] = r
 		}
 	}
@@ -46,6 +48,10 @@ func (s Service) Slots() ([]Slot, error) {
 			if r.Kind == "cloud" {
 				task, _ := s.CloudTask(r.Key)
 				slots[len(slots)-1].CloudState = task.State
+			}
+			if r.Kind == NativeCloudKind {
+				slots[len(slots)-1].CloudBlocked = r.State == Starting || r.State == Failed
+				slots[len(slots)-1].CloudHost, slots[len(slots)-1].CloudState = s.NativeCloudStatus(r)
 			}
 		}
 	}
@@ -91,6 +97,9 @@ func (s Service) FocusSlot(number int) error {
 }
 
 func FocusSlot(slot Slot) error {
+	if slot.Kind == NativeCloudKind && !slot.Exited && slot.CloudBlocked {
+		return nil
+	}
 	if _, err := tmux("select-window", "-t", slot.Window); err != nil {
 		return err
 	}
@@ -121,6 +130,14 @@ func (s Service) ConfigureDopamine() error {
 	for _, slot := range slots {
 		if slot.Window == "" {
 			continue
+		}
+		if slot.Kind == NativeCloudKind {
+			if r, e := s.readRecord(slot.Key); e == nil && r.Token == slot.Token && r.State == Starting && !nativeConnectorAlive(r) {
+				_ = s.failNativeCloud(r, "cloud startup was interrupted; reopen this session to retry")
+				if _, e := recordTmux(r, "display-message", "-p", "-t", r.Pane, "#{pane_id}"); e != nil {
+					continue
+				}
+			}
 		}
 		for _, option := range [][]string{
 			{"set-option", "-w", "-t", slot.Window, "pane-border-lines", "spaces"},
@@ -207,7 +224,7 @@ func (s Service) ConfigureDopamine() error {
 	liveCodex := "#{m:*1*,#{P:#{&&:#{!=:#{pane_dead},1},#{||:#{==:#{@dopamine_kind},codex},#{m:*codex*,#{pane_current_command}}}}}}"
 	liveShell := "#{m:*1*,#{P:#{&&:#{!=:#{pane_dead},1},#{==:#{@dopamine_kind},shell}}}}"
 	closeShell := "if-shell -F " + Quote(liveShell) + " " + Quote("confirm-before -y -p "+Quote("terminal is running. close this workspace? enter: yes / esc: no")+" "+Quote("kill-window -t #{window_id}")) + " kill-window"
-	liveCloud := "#{m:*1*,#{P:#{&&:#{!=:#{pane_dead},1},#{==:#{@dopamine_kind},cloud}}}}"
+	liveCloud := "#{m:*1*,#{P:#{&&:#{!=:#{pane_dead},1},#{||:#{==:#{@dopamine_kind},cloud},#{==:#{@dopamine_kind},cloud-native}}}}}"
 	closeShell = "if-shell -F " + Quote(liveCloud) + " " + Quote("confirm-before -y -p "+Quote("close cloud tab? unsent text is lost; submitted work continues. enter: yes / esc: no")+" "+Quote("kill-window -t #{window_id}")) + " " + Quote(closeShell)
 	close := "if-shell -F " + Quote(liveCodex) + " " + Quote("confirm-before -y -p "+Quote("codex is running. close this workspace? enter: yes / esc: no")+" "+Quote("kill-window -t #{window_id}")) + " " + Quote(closeShell)
 	_, err = tmux("bind-key", "-T", dopamineKeyTable, "C-w", "if-shell", "-F", "#{!=:#{@dopamine_role},dashboard}", close)

@@ -1,11 +1,8 @@
-[1m  codex cloud · Fixture
+>_ OpenAI Codex (native fixture)
 
-[0m  status: [1mworking · queued or running[0m
-  checked: 03:16:24
+working remotely
 
-  https://chatgpt.com/codex/tasks/task_e_fixture
+Cloud  alt+f12 to cycle
 
-[PENDING] cloud smoke fixture fixture environment · now +2/-1 · 1 file
-
-r: refresh · o: result · d: diff · esc: back
-closing this tab keeps the cloud task running.
+› Ask Codex to do anything
+GPT-6.1-Sol high · fixture

@@ -105,12 +105,12 @@ func (s Service) Start(p Project, kind, id string) (Record, error) {
 	if worktree {
 		kind = "codex"
 	}
-	if kind != "codex" && kind != "shell" && kind != "cloud" {
+	if kind != "codex" && kind != "shell" && kind != "cloud" && kind != NativeCloudKind {
 		return Record{}, errors.New("unknown launch kind")
 	}
 	key := kind + "-" + p.ID
 	launchDir := p.Path
-	if kind == "shell" || kind == "cloud" {
+	if kind == "shell" || kind == "cloud" || kind == NativeCloudKind {
 		key += "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	}
 	if kind == "cloud" && id != "" {
@@ -190,6 +190,12 @@ func (s Service) Start(p Project, kind, id string) (Record, error) {
 	}
 	var args []string
 	switch kind {
+	case NativeCloudKind:
+		launchDir, err = s.prepareNativeCloud(p, key)
+		if err != nil {
+			return Record{}, err
+		}
+		args = append(s.paneEnvironment(p.ID), s.Executable, "exec-native-cloud")
 	case "cloud":
 		args = append(s.paneEnvironment(p.ID), s.Executable, "cloud-task", key)
 	case "codex":
@@ -244,6 +250,10 @@ func (s Service) Start(p Project, kind, id string) (Record, error) {
 		return Record{}, errors.New("unexpected tmux response")
 	}
 	r := Record{Key: key, Project: p.ID, Kind: kind, SessionID: id, Target: parts[0], Pane: parts[1], Token: token, Created: time.Now().Unix(), Log: filepath.Join(s.StateDir, "logs", key+".log")}
+	if kind == NativeCloudKind {
+		r.State = Starting
+		r.RootPID, r.RootStart, r.BootID = os.Getpid(), processStart(os.Getpid()), bootID()
+	}
 	if _, err = tmux("set-option", "-p", "-t", r.Pane, "@dopamine_token", token); err != nil {
 		return r, err
 	}
@@ -267,6 +277,10 @@ func (s Service) Start(p Project, kind, id string) (Record, error) {
 	}
 	if kind == "codex" {
 		if err = s.configureCodexObserver(r); err != nil {
+			return r, err
+		}
+	} else if kind == NativeCloudKind {
+		if err = s.nativeCloudLog(r); err != nil {
 			return r, err
 		}
 	} else if kind == "shell" {

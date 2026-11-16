@@ -13,7 +13,7 @@ type projectAction struct{ key, label string }
 
 func (m Model) projectActions() []projectAction {
 	actions := []projectAction{{"n", "new codex session"}, {"t", "new terminal"}, {"s", "start server"}, {"x", "stop server"}, {"o", "open url"}}
-	actions = append(actions, projectAction{"c", "new cloud task"}, projectAction{"history", "cloud tasks…"})
+	actions = append(actions, projectAction{"c", "new cloud session"}, projectAction{"history", "cloud tasks…"})
 	if m.project < len(m.projects) && len(m.projects[m.project].Launch) > 0 {
 		actions = append(actions, projectAction{"a", "server autostart: " + workspace.AutostartLabel(m.projects[m.project].ServerAutostart)})
 	}

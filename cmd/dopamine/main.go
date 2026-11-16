@@ -45,6 +45,12 @@ func run(args []string) error {
 			if len(args) == 2 {
 				return dopamine.RunCloud(s, args[1])
 			}
+		case "exec-native-cloud":
+			return s.ExecNativeCloud()
+		case "cloud-failed":
+			if len(args) == 3 {
+				return s.ShowCloudFailure(args[1], args[2])
+			}
 		case "exec-cloud":
 			if len(args) >= 3 {
 				return s.ExecCloud(args[1], args[2:])

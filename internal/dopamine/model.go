@@ -358,12 +358,16 @@ func (m Model) perform(key string, p workspace.Project) tea.Cmd {
 			}
 			return finished{message: "opened · " + p.AppURL, err: workspace.OpenURL(p.AppURL, "app")}
 		case "n", "t", "c":
+			if key == "c" {
+				r, err := m.service.StartNativeCloud(p)
+				if r.Pane != "" {
+					err = errors.Join(err, m.service.FocusNativeCloud(r))
+				}
+				return finished{message: "cloud session opened · " + p.Name, err: err, workspaceOpened: err == nil}
+			}
 			kind := "codex"
 			if key == "t" {
 				kind = "shell"
-			}
-			if key == "c" {
-				kind = "cloud"
 			}
 			r, err := m.service.Start(p, kind, "")
 			if err == nil {
@@ -400,27 +404,22 @@ func (m Model) current() int {
 }
 
 func (m Model) railOffset() int {
-	start, rows := m.current(), 0
-	for start >= 0 {
-		size := 1
-		if start < len(m.slots) && m.slots[start].Kind == "cloud" {
-			size = 2
-		}
-		if rows+size > max(1, m.height-2) {
-			return start + 1
-		}
-		rows += size
-		start--
-	}
-	return 0
+	return max(0, m.current()-max(1, m.height-2)+1)
 }
 
 func (m Model) rail() string {
 	lines := []string{"", ""}
 	for i := m.railOffset(); i < len(m.slots) && len(lines) < m.height; i++ {
 		label := fmt.Sprintf(" %d ", i+1)
-		if m.slots[i].Kind == "cloud" {
-			label = fmt.Sprintf(" %d%s", i+1, cloudMarker(m.slots[i].CloudState))
+		if m.slots[i].Kind == "cloud" || m.slots[i].Kind == "cloud-native" {
+			badge := "c"
+			if m.slots[i].CloudHost == "local" {
+				badge = "l"
+			}
+			if m.slots[i].CloudHost == "unknown" {
+				badge = "?"
+			}
+			label = fmt.Sprintf(" %d%s%s", i+1, badge, cloudMarker(m.slots[i].CloudState))
 		}
 		if i == m.current() {
 			label = selected.Render(label)
@@ -428,9 +427,6 @@ func (m Model) rail() string {
 			label = muted.Render(label)
 		}
 		lines = append(lines, lipgloss.PlaceHorizontal(railWidth, lipgloss.Left, label))
-		if m.slots[i].Kind == "cloud" && len(lines) < m.height {
-			lines = append(lines, muted.Render(" "+CloudIcon))
-		}
 	}
 	return strings.Join(lines, "\n")
 }

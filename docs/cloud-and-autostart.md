@@ -1,25 +1,26 @@
 # Cloud tasks and server autostart
 
-## Codex Cloud
+## Native Codex Cloud sessions
 
-Open a project's menu and choose **new cloud task** (`c`). The new tab has a cloud below its number, so it stays distinct from a local Codex terminal.
+Open a project's menu and choose **new cloud session** (`c`). Dopamine opens the installed Codex terminal interface, enables its Cloud connection for this invocation and switches the empty conversation to Cloud before exposing it for input. It uses the existing Codex login and `/run/current-system/sw/bin/codex-vpn`.
 
-1. Enter the name or ID of an existing Codex Cloud environment. Use the native `codex cloud` picker or your Codex Cloud settings to find/configure it. The environment needs the repository and tools required by the task.
-2. Press Enter or Tab to write the task. Enter adds a new line; **Ctrl+s sends it**. The environment is remembered for this project.
-3. The tab shows the last known cloud status, the time it was checked, the remote branch, and the task link. It checks every 15 seconds while the tab is running. `r` refreshes, `o` opens the result through the existing browser handler, and `d` shows the cloud diff with scrolling. Esc returns from the diff or visits the dashboard.
-4. **Cloud tasks…** in the project menu reopens a saved task, including after tmux or the computer restarts. Reopening an existing live tab selects it. History labels are cached; opening the task refreshes its state.
+This is the actual native Codex interface: use **/model** to choose a model and reasoning effort from the account's Cloud catalog, **/status** to inspect the active conversation, and **/resume** to reopen conversations. Native Cloud is an opt-in preview in Codex **0.169.0 or newer** on supported Linux/macOS clients; dopamine's currently supported installation remains Linux/NixOS. An account or server without this connection produces an error tab rather than an editable local fallback.
 
-Rail markers: `~` means submitting/working, `✓` means completed, `!` means failed/cancelled, and `?` means a submission needs checking. Every cloud tab has `⢔⣊⣑⡢` on the row immediately below its number; clicking either row selects it. The cloud CLI reports `PENDING` for both queued and running tasks, so dopamine displays **working · queued or running** rather than claiming a finer state. `READY` means the result is ready to review; `APPLIED` is also complete.
+Every tab takes **one row**. `2c` means the current thread has been identified as Cloud, `2c~` means working/connecting, `2c✓` means a ready thread with recorded token usage, and `2c!` means a connection/startup error. A native session deliberately switched to Local shows `l` when identified. After changing/resuming a conversation whose host cannot be identified, the badge becomes `?`; inspect native `/status` rather than assuming it is Cloud. Ordinary local tabs keep their existing labels. Clicking a row selects it; cloud startup remains inaccessible through dopamine navigation until the handoff completes.
 
-The task runs remotely after submission, independently of the local tab or computer. Ctrl+w confirms closing a cloud tab to protect unsent text; closing a submitted task's tab does not cancel it. Draft text before submission lives in that tab. Saved submitted tasks live under `$XDG_STATE_HOME/dopamine/cloud` (or the configured dopamine state directory), with private file permissions.
+The native client prepares its empty local conversation in a private directory under the dopamine state directory, with only credential-free GitHub origin metadata. Project source files, project Codex settings and project trust are not copied or changed. If Codex asks for folder trust, dopamine accepts only the selected native trust prompt for its own verified private directory; Codex records that trust using its normal mechanism. It never automatically trusts the project directory. Native Cloud derives its remote checkout from that metadata. Local uncommitted changes are not uploaded. Non-GitHub folders open a Cloud workspace without an inferred repository.
 
-Cloud uses the remote version of the selected branch. Dopamine sends the task text and branch name; it does not upload uncommitted files, push a branch, apply the resulting diff, or merge it. Review the result before applying it with the native Codex Cloud workflow.
+The host-switch shortcut and terminal-title metadata are invocation-only settings. The native TUI retains control of its own preferences and conversation storage; choosing a model or changing a host follows Codex's own persistence behavior. Local sessions opened with `n` keep their existing launcher and settings. The terminal title supplies current run-state and thread ID for the rail; dopamine does not parse model prose to decide whether work is running.
 
-If sending times out or returns no identifiable task link, dopamine saves **submission uncertain** and does not retry automatically. Check `codex cloud` first, then paste the task ID or link into the attachment field. This avoids creating a duplicate after a lost response. A status/network error retains the last known state and timestamp and displays the refresh error.
+Closing the tab leaves submitted Cloud work running. Ctrl+w asks for confirmation to protect unsent text. If the Cloud stream ends, the native interface reports it; reopen the conversation/session to reconnect. No automatic model task is sent during startup, model discovery or status display.
 
-The integration reuses the existing `/run/current-system/sw/bin/codex-vpn` launcher, Codex login and network setup. It requires a Codex CLI with `cloud exec`, `cloud status`, and `cloud diff` (checked against 0.169.0). This is an experimental upstream CLI interface; dopamine does not call undocumented cloud HTTP endpoints or manage credentials itself.
+![Native cloud session with a compact one-row tab](assets/dopamine/cloud-working.png)
 
-![Cloud task with a cloud drawn beneath its tab number](assets/dopamine/cloud-working.png)
+### Previously saved batch tasks
+
+**Cloud tasks…** in the project menu retains access to tasks created by the earlier `codex cloud exec` integration. Existing task IDs and files are preserved. Open an item to check its state; `r` refreshes, `o` opens its result and `d` shows the diff. Native conversations use Codex's own `/resume` instead of this legacy task list.
+
+The old CLI's `PENDING` status combines queueing and running, so saved batch tasks still display **working · queued or running**. Their environment setting (`cloud_environment`) remains intact. A saved uncertain submission can still be attached to its task ID/link without submitting it again.
 
 ## Server autostart
 
@@ -39,14 +40,14 @@ Installed source builds use the existing stable `source-package/bin/dopamine` GC
 
 The service reads current project settings on every start. Its environment contains the captured PATH, HOME and dopamine registry/state locations; use the project's declared `nix develop -c …` launch command for dependencies. Environment-specific secrets should be supplied through the project's existing mechanisms. Status failures name the journal command, `journalctl --user -u dopamine-server-<hash>.service`.
 
-Both settings are per project in `projects.json`: `cloud_environment` and `server_autostart` (`off`, `dopamine`, `login`). Edits preserve unknown settings and missing project entries.
+Server autostart is per project in `projects.json`: `server_autostart` (`off`, `dopamine`, `login`). Edits preserve unknown settings and missing project entries, including earlier `cloud_environment` values.
 
 ![Server autostart choices](assets/dopamine/autostart.png)
 
 ## Implementation choice and verification
 
-Reuse native Codex cloud commands instead of duplicating authentication or depending on private HTTP APIs. The existing Go/tmux/Bubble Tea app handles display and persists task IDs; no new service or dependency is needed. Native systemd user services provide login lifecycle and process supervision; the existing tmux launcher already covers starting when dopamine opens. This is a smaller integration than adding a second background daemon.
+Reuse Codex 0.169's native `tui_multi_backend` Cloud connection, model catalog and full terminal interface instead of recreating a chat client or authentication layer. The previous batch commands remain only for existing saved tasks; no new daemon or dependency is needed. Native systemd user services provide login lifecycle and process supervision; the existing tmux launcher already covers starting when dopamine opens. This is a smaller integration than adding a second background daemon.
 
-Sources: [OpenAI CLI reference](https://learn.chatgpt.com/docs/developer-commands?surface=cli), [cloud environments](https://learn.chatgpt.com/docs/environments/cloud-environments), [upstream status formatting and exit codes](https://github.com/openai/codex/blob/rust-v0.169.0/codex-rs/cloud-tasks/src/lib.rs), [systemd services](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html).
+Sources: [OpenAI CLI reference](https://learn.chatgpt.com/docs/developer-commands?surface=cli), [cloud environments](https://learn.chatgpt.com/docs/environments/cloud-environments), [native Cloud release notes](https://learn.chatgpt.com/docs/changelog), [native Cloud model selection](https://github.com/openai/codex/pull/60651), [systemd services](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html).
 
-`make test` includes cloud/autostart unit tests and an isolated real tmux/TUI/HTTP scenario. Its Codex Cloud commands and systemd manager are fixtures: it verifies transitions, controls, registry persistence and real foreground server start/stop without making a model call or changing the user's services. Generated units are also checked with the real systemd parser when available. A fixture run does not establish account access to a live cloud environment or replace testing an actual login.
+`make test` includes cloud/autostart unit tests and an isolated real tmux/TUI/HTTP scenario. Its Codex Cloud commands and systemd manager are fixtures: it verifies transitions, controls, registry persistence and real foreground server start/stop without making a model call or changing the user's services. Generated units are also checked with the real systemd parser when available. A fixture run does not replace a model task or an actual login. The installed native client was also checked against the signed-in account: Cloud connection and `/model` catalog discovery were exercised without sending a model task.

@@ -114,16 +114,8 @@ func (m Model) cloudHistoryView(width int) string {
 	return strings.Join(lines, "\n")
 }
 func (m Model) railSlotAt(y int) int {
-	row := 2
-	for i := m.railOffset(); i < len(m.slots); i++ {
-		height := 1
-		if m.slots[i].Kind == "cloud" {
-			height = 2
-		}
-		if y >= row && y < row+height {
-			return i
-		}
-		row += height
+	if index := y - 2 + m.railOffset(); y >= 2 && index >= 0 && index < len(m.slots) {
+		return index
 	}
 	return -1
 }

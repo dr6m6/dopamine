@@ -11,15 +11,15 @@ import (
 	"github.com/dr6m6/dopamine/internal/workspace"
 )
 
-func TestCloudRailKeepsIconUnderNumberAndMouseTargets(t *testing.T) {
+func TestCloudRailUsesOneRowForEveryWorkspace(t *testing.T) {
 	m := dashboardFixture()
 	m.height = 16
-	m.slots = []workspace.Slot{{Dashboard: true}, {Kind: "cloud", Window: "@2", CloudState: "pending"}, {Kind: "shell", Window: "@3"}, {Kind: "cloud", Window: "@4", CloudState: "ready"}}
+	m.slots = []workspace.Slot{{Dashboard: true}, {Kind: workspace.NativeCloudKind, Window: "@2", CloudState: "running"}, {Kind: "shell", Window: "@3"}, {Kind: "cloud", Window: "@4", CloudState: "ready"}}
 	rows := strings.Split(ansi.Strip(m.rail()), "\n")
-	if !strings.Contains(rows[3], "2~") || !strings.Contains(rows[4], CloudIcon) || !strings.Contains(rows[5], "3") || !strings.Contains(rows[6], "4✓") || !strings.Contains(rows[7], CloudIcon) {
+	if len(rows) != 6 || !strings.Contains(rows[3], "2c~") || !strings.Contains(rows[4], "3") || !strings.Contains(rows[5], "4c✓") {
 		t.Fatal(rows)
 	}
-	for y, want := range map[int]int{2: 0, 3: 1, 4: 1, 5: 2, 6: 3, 7: 3} {
+	for y, want := range map[int]int{2: 0, 3: 1, 4: 2, 5: 3, 6: -1, 1: -1} {
 		if got := m.railSlotAt(y); got != want {
 			t.Fatal(y, got, want)
 		}
@@ -29,13 +29,12 @@ func TestCloudRailKeepsIconUnderNumberAndMouseTargets(t *testing.T) {
 			t.Fatal(row)
 		}
 	}
-	// Scroll mixed one/two-row entries so the current cloud and icon stay together.
 	for i := 0; i < 30; i++ {
-		m.slots = append(m.slots, workspace.Slot{Kind: "cloud", Window: fmt.Sprintf("@%d", i+5)})
+		m.slots = append(m.slots, workspace.Slot{Kind: workspace.NativeCloudKind, Window: fmt.Sprintf("@%d", i+5)})
 	}
 	m.sidebar, m.window = true, "@34"
 	text := ansi.Strip(m.rail())
-	if !strings.Contains(text, "34") || len(strings.Split(text, "\n")) > 16 {
+	if !strings.Contains(text, "34c") || len(strings.Split(text, "\n")) > 16 {
 		t.Fatal(text)
 	}
 }

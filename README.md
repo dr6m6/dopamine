@@ -102,7 +102,7 @@ DOPAMINE_PROJECTS_ROOT="$HOME/work" dopamine
 
 ## Cloud tasks and server autostart
 
-Choose **new cloud task** (`c`) in a project menu to send work to a configured Codex Cloud environment. A cloud under the tab number distinguishes remote work; the tab shows working/completed/failed status and the last check time. Open saved work through **cloud tasks…**. Cloud commands use the existing Codex login and VPN launcher.
+Choose **new cloud session** (`c`) for the native Codex terminal connected to Cloud. Use `/model` for the model and reasoning effort. Cloud tabs take one row, with a small `c` beside the number and working/completed/error markers. The existing Codex login and VPN launcher are reused. Previously saved batch tasks remain available through **cloud tasks…**.
 
 Projects with a server command also have **server autostart** (`a`): off, when dopamine opens, or at login through a user systemd service. Select a mode with arrows and save with Enter.
 

@@ -15,9 +15,6 @@ import (
 	"github.com/dr6m6/dopamine/internal/workspace"
 )
 
-// CloudIcon is a tiny dot drawing, matching the molecule and avoiding font-only symbols.
-const CloudIcon = "⢔⣊⣑⡢"
-
 type cloudUpdated struct {
 	task workspace.CloudTask
 	err  error
@@ -308,13 +305,13 @@ func RunCloud(s workspace.Service, key string) error {
 // Keep a small status vocabulary in the rail; the task tab spells it out.
 func cloudMarker(state string) string {
 	switch state {
-	case "pending", "running", "queued", "submitting":
+	case "pending", "running", "queued", "submitting", "connecting":
 		return "~"
 	case "ready", "applied":
 		return "✓"
 	case "error", "cancelled", "canceled":
 		return "!"
-	case "submission uncertain":
+	case "submission uncertain", "attention", "unknown":
 		return "?"
 	default:
 		return ""
