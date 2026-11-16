@@ -13,6 +13,7 @@ type Slot struct {
 	Kind                  string
 	Key, Token            string
 	Dashboard, Exited     bool
+	CloudState            string
 }
 
 func (s Service) Slots() ([]Slot, error) {
@@ -26,7 +27,7 @@ func (s Service) Slots() ([]Slot, error) {
 	}
 	byPane := make(map[string]Record)
 	for _, r := range records {
-		if r.Kind == "codex" || r.Kind == "shell" {
+		if r.Kind == "codex" || r.Kind == "shell" || r.Kind == "cloud" {
 			byPane[r.Pane+"|"+r.Token] = r
 		}
 	}
@@ -42,6 +43,10 @@ func (s Service) Slots() ([]Slot, error) {
 			slots = append(slots, Slot{Window: f[0], Pane: f[1], Dashboard: true, Exited: f[4] == "1"})
 		} else if r, ok := byPane[f[1]+"|"+f[3]]; ok {
 			slots = append(slots, Slot{Window: f[0], Pane: f[1], Project: r.Project, Kind: r.Kind, Key: r.Key, Token: r.Token, Exited: f[4] == "1"})
+			if r.Kind == "cloud" {
+				task, _ := s.CloudTask(r.Key)
+				slots[len(slots)-1].CloudState = task.State
+			}
 		}
 	}
 	if !hasDashboard {
@@ -202,6 +207,8 @@ func (s Service) ConfigureDopamine() error {
 	liveCodex := "#{m:*1*,#{P:#{&&:#{!=:#{pane_dead},1},#{||:#{==:#{@dopamine_kind},codex},#{m:*codex*,#{pane_current_command}}}}}}"
 	liveShell := "#{m:*1*,#{P:#{&&:#{!=:#{pane_dead},1},#{==:#{@dopamine_kind},shell}}}}"
 	closeShell := "if-shell -F " + Quote(liveShell) + " " + Quote("confirm-before -y -p "+Quote("terminal is running. close this workspace? enter: yes / esc: no")+" "+Quote("kill-window -t #{window_id}")) + " kill-window"
+	liveCloud := "#{m:*1*,#{P:#{&&:#{!=:#{pane_dead},1},#{==:#{@dopamine_kind},cloud}}}}"
+	closeShell = "if-shell -F " + Quote(liveCloud) + " " + Quote("confirm-before -y -p "+Quote("close cloud tab? unsent text is lost; submitted work continues. enter: yes / esc: no")+" "+Quote("kill-window -t #{window_id}")) + " " + Quote(closeShell)
 	close := "if-shell -F " + Quote(liveCodex) + " " + Quote("confirm-before -y -p "+Quote("codex is running. close this workspace? enter: yes / esc: no")+" "+Quote("kill-window -t #{window_id}")) + " " + Quote(closeShell)
 	_, err = tmux("bind-key", "-T", dopamineKeyTable, "C-w", "if-shell", "-F", "#{!=:#{@dopamine_role},dashboard}", close)
 	if err != nil {

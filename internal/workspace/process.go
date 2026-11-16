@@ -88,19 +88,43 @@ func (s Service) Start(p Project, kind, id string) (Record, error) {
 		return Record{}, errors.New("working directory is not a folder")
 	}
 	if kind == "app" || kind == "terminal" {
+		if kind == "app" {
+			if old, e := s.readRecord("app-" + p.ID); e == nil && (liveRecord(old) || applicationProcessAlive(old)) {
+				return old, nil
+			}
+			if status, owned := s.loginServerStatus(p); owned && (p.ServerAutostart == AutostartLogin || status.State != Stopped) {
+				return s.startLoginServer(p)
+			}
+			if p.ServerAutostart == AutostartLogin {
+				return Record{}, errors.New("login service missing; select autostart at login again")
+			}
+		}
 		return s.startDetached(p, kind)
 	}
 	worktree := kind == "worktree"
 	if worktree {
 		kind = "codex"
 	}
-	if kind != "codex" && kind != "shell" {
+	if kind != "codex" && kind != "shell" && kind != "cloud" {
 		return Record{}, errors.New("unknown launch kind")
 	}
 	key := kind + "-" + p.ID
 	launchDir := p.Path
-	if kind == "shell" {
+	if kind == "shell" || kind == "cloud" {
 		key += "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+	if kind == "cloud" && id != "" {
+		if !validCloudKey(id) {
+			return Record{}, errors.New("invalid cloud workspace")
+		}
+		key = id
+		task, err := s.CloudTask(key)
+		if err != nil {
+			return Record{}, err
+		}
+		if task.Project != p.ID {
+			return Record{}, errors.New("cloud task belongs to another project")
+		}
 	}
 	if kind == "codex" {
 		if id != "" && !sessionID.MatchString(id) {
@@ -166,6 +190,8 @@ func (s Service) Start(p Project, kind, id string) (Record, error) {
 	}
 	var args []string
 	switch kind {
+	case "cloud":
+		args = append(s.paneEnvironment(p.ID), s.Executable, "cloud-task", key)
 	case "codex":
 		args = []string{s.Executable, "exec-codex"}
 		if id != "" {
@@ -243,7 +269,7 @@ func (s Service) Start(p Project, kind, id string) (Record, error) {
 		if err = s.configureCodexObserver(r); err != nil {
 			return r, err
 		}
-	} else {
+	} else if kind == "shell" {
 		// pane-died supplies hook_pane, but some tmux versions leave
 		// hook_window empty. Capture the stable window ID before launch.
 		window, err := tmux("display-message", "-p", "-t", r.Pane, "#{window_id}")
@@ -416,6 +442,8 @@ func OpenURL(raw, kind string) error {
 	switch kind {
 	case "github":
 		ok = u.Scheme == "https" && u.Host == "github.com"
+	case "cloud":
+		ok = u.Scheme == "https" && u.Host == "chatgpt.com" && cloudURL.MatchString(raw)
 	case "app":
 		_, e := appAddress(raw)
 		ok = e == nil

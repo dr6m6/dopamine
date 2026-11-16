@@ -41,6 +41,18 @@ func run(args []string) error {
 		// Private tmux callbacks also retain compatibility with existing runs.
 		case "exec-codex":
 			return s.ExecCodex(args[1:])
+		case "cloud-task":
+			if len(args) == 2 {
+				return dopamine.RunCloud(s, args[1])
+			}
+		case "exec-cloud":
+			if len(args) >= 3 {
+				return s.ExecCloud(args[1], args[2:])
+			}
+		case "serve-project":
+			if len(args) == 2 {
+				return s.ExecServer(args[1])
+			}
 		case "codex-notify":
 			if len(args) == 4 {
 				// Notification failures must not interrupt a native Codex turn.
@@ -89,6 +101,9 @@ func run(args []string) error {
 		}
 	}
 	os.Setenv("DOPAMINE_EXECUTABLE", s.Executable)
+	if err := s.AutostartServers(); err != nil {
+		fmt.Fprintln(os.Stderr, "dopamine autostart:", err)
+	}
 	target, err := s.EnsureDashboard()
 	if err != nil {
 		return err

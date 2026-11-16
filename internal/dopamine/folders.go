@@ -6,12 +6,17 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/dr6m6/dopamine/internal/workspace"
 )
 
 type projectAction struct{ key, label string }
 
 func (m Model) projectActions() []projectAction {
 	actions := []projectAction{{"n", "new codex session"}, {"t", "new terminal"}, {"s", "start server"}, {"x", "stop server"}, {"o", "open url"}}
+	actions = append(actions, projectAction{"c", "new cloud task"}, projectAction{"history", "cloud tasks…"})
+	if m.project < len(m.projects) && len(m.projects[m.project].Launch) > 0 {
+		actions = append(actions, projectAction{"a", "server autostart: " + workspace.AutostartLabel(m.projects[m.project].ServerAutostart)})
+	}
 	if m.project < len(m.projects) && m.service.ExternalFolder(m.projects[m.project].Path) {
 		actions = append(actions, projectAction{"remove", "remove from list"})
 	}

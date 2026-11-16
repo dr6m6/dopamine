@@ -402,7 +402,7 @@ for line in sys.stdin:
             wait_for(lambda: "> quite external 123" in screen(), "external folder selection was lost")
             key(b"\r")
             wait_for(lambda: "remove from list" in screen(), "external menu unavailable")
-            key(b"jjjjj\r")
+            key(b"jjjjjjj\r")
             wait_for(lambda: "remove this folder from the list?" in screen(), "remove confirmation missing")
             key(b"\x1b")
             wait_for(lambda: "remove from list" in screen(), "remove cancellation failed")

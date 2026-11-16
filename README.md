@@ -100,6 +100,14 @@ Override the automatic discovery directory when launching:
 DOPAMINE_PROJECTS_ROOT="$HOME/work" dopamine
 ```
 
+## Cloud tasks and server autostart
+
+Choose **new cloud task** (`c`) in a project menu to send work to a configured Codex Cloud environment. A cloud under the tab number distinguishes remote work; the tab shows working/completed/failed status and the last check time. Open saved work through **cloud tasks…**. Cloud commands use the existing Codex login and VPN launcher.
+
+Projects with a server command also have **server autostart** (`a`): off, when dopamine opens, or at login through a user systemd service. Select a mode with arrows and save with Enter.
+
+[Setup, controls, status semantics and recovery →](docs/cloud-and-autostart.md)
+
 ## Keyboard shortcuts
 
 | Keys | Action |

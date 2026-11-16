@@ -15,13 +15,15 @@ import (
 )
 
 type Project struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Path      string   `json:"path"`
-	GitHub    string   `json:"github,omitempty"`
-	Launch    []string `json:"launch,omitempty"`
-	LaunchVPN bool     `json:"launch_vpn,omitempty"`
-	AppURL    string   `json:"app_url,omitempty"`
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Path             string   `json:"path"`
+	GitHub           string   `json:"github,omitempty"`
+	Launch           []string `json:"launch,omitempty"`
+	LaunchVPN        bool     `json:"launch_vpn,omitempty"`
+	AppURL           string   `json:"app_url,omitempty"`
+	CloudEnvironment string   `json:"cloud_environment,omitempty"`
+	ServerAutostart  string   `json:"server_autostart,omitempty"`
 }
 
 type Registry struct {

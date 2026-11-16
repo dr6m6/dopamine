@@ -153,6 +153,12 @@ func (s Service) AppStatuses(projects []Project) map[string]AppStatus {
 	out := make(map[string]AppStatus, len(projects))
 	for _, p := range projects {
 		r, err := s.readRecord("app-" + p.ID)
+		if err != nil || (!liveRecord(r) && !applicationProcessAlive(r)) {
+			if status, owned := s.loginServerStatus(p); owned && (p.ServerAutostart == AutostartLogin || status.State != Stopped) {
+				out[p.ID] = status
+				continue
+			}
+		}
 		if errors.Is(err, os.ErrNotExist) {
 			out[p.ID] = AppStatus{State: Stopped}
 			continue
@@ -236,6 +242,11 @@ func (s Service) StopApp(p Project) error {
 		return err
 	}
 	defer lock.Close()
+	if s.ownsUnit(p) {
+		if _, err := command("systemctl", "--user", "stop", s.unitName(p)); err != nil {
+			return err
+		}
+	}
 	r, err := s.readRecord("app-" + p.ID)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil

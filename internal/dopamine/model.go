@@ -75,6 +75,11 @@ type Model struct {
 	removingFolder     bool
 	folderInput        textinput.Model
 	notificationsMuted bool
+	serverSettings     bool
+	autostartChoice    int
+	cloudHistory       bool
+	cloudTasks         []workspace.CloudTask
+	cloudChoice        int
 }
 
 func New(s workspace.Service, sidebar bool, window string) Model {
@@ -134,6 +139,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !found {
 			m.projectOpen = false
 			m.removingFolder = false
+			m.serverSettings, m.cloudHistory = false, false
 		}
 		if global {
 			m.project = len(m.projects) + min(globalActionCount-1, globalIndex)
@@ -147,6 +153,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nextTick()
 	case tick:
 		return m, m.load()
+	case serverModeChanged:
+		m.busy = false
+		if v.err != nil {
+			m.status = v.err.Error()
+		} else {
+			m.serverSettings = false
+			m.status = "server autostart: " + workspace.AutostartLabel(v.mode)
+			for i := range m.projects {
+				if m.projects[i].ID == v.project {
+					m.projects[i].ServerAutostart = v.mode
+				}
+			}
+		}
+	case cloudHistoryLoaded:
+		m.busy = false
+		if v.err != nil {
+			m.status = v.err.Error()
+		} else {
+			m.cloudHistory, m.cloudTasks, m.cloudChoice, m.status = true, v.tasks, 0, ""
+		}
 	case finished:
 		m.busy = false
 		m.status = v.message
@@ -155,6 +181,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if v.workspaceOpened && v.err == nil {
 			m.projectOpen = false
+			m.cloudHistory, m.serverSettings = false, false
 			m.action = 0
 		}
 		// The regular refresh chain remains serial. Do not start a second poll.
@@ -190,7 +217,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseClickMsg:
 		mouse := v.Mouse()
 		if mouse.Button == tea.MouseLeft && mouse.X < 5 {
-			i := mouse.Y - 2 + m.railOffset()
+			i := m.railSlotAt(mouse.Y)
 			if i >= 0 && i < len(m.slots) {
 				return m, m.focus(i + 1)
 			}
@@ -202,6 +229,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.removingFolder {
 			return m.updateFolderRemoval(key)
+		}
+		if m.serverSettings {
+			return m.updateServerSettings(key)
+		}
+		if m.cloudHistory {
+			return m.updateCloudHistory(key)
 		}
 		if !m.sidebar && (key == "?" || (key == "esc" && m.help)) {
 			m.help = !m.help
@@ -270,7 +303,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.action = (m.action + len(m.projectActions()) - 1) % len(m.projectActions())
 		case "j", "down", "right", "l":
 			m.action = (m.action + 1) % len(m.projectActions())
-		case "s", "x", "o", "b", "n", "t", "enter":
+		case "s", "x", "o", "b", "n", "t", "c", "a", "enter":
 			if len(m.projects) == 0 {
 				return m, nil
 			}
@@ -280,6 +313,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if key == "remove" {
 				m.removingFolder, m.status = true, ""
 				return m, nil
+			}
+			if key == "a" && len(m.projects[m.project].Launch) > 0 {
+				m.serverSettings, m.autostartChoice, m.status = true, 0, ""
+				for i, mode := range serverModes {
+					if m.projects[m.project].ServerAutostart == mode {
+						m.autostartChoice = i
+					}
+				}
+				return m, nil
+			}
+			if key == "history" {
+				m.busy = true
+				return m, func() tea.Msg {
+					tasks, err := m.service.CloudTasks(m.projects[m.project].ID)
+					return cloudHistoryLoaded{tasks: tasks, err: err}
+				}
 			}
 			m.busy, m.status = true, "working…"
 			return m, m.perform(key, m.projects[m.project])
@@ -308,10 +357,13 @@ func (m Model) perform(key string, p workspace.Project) tea.Cmd {
 				return finished{err: fmt.Errorf("no url configured for %s · edit %s", p.Name, m.service.RegistryPath())}
 			}
 			return finished{message: "opened · " + p.AppURL, err: workspace.OpenURL(p.AppURL, "app")}
-		case "n", "t":
+		case "n", "t", "c":
 			kind := "codex"
 			if key == "t" {
 				kind = "shell"
+			}
+			if key == "c" {
+				kind = "cloud"
 			}
 			r, err := m.service.Start(p, kind, "")
 			if err == nil {
@@ -348,19 +400,37 @@ func (m Model) current() int {
 }
 
 func (m Model) railOffset() int {
-	return max(0, m.current()-max(1, m.height-3)+1)
+	start, rows := m.current(), 0
+	for start >= 0 {
+		size := 1
+		if start < len(m.slots) && m.slots[start].Kind == "cloud" {
+			size = 2
+		}
+		if rows+size > max(1, m.height-2) {
+			return start + 1
+		}
+		rows += size
+		start--
+	}
+	return 0
 }
 
 func (m Model) rail() string {
 	lines := []string{"", ""}
 	for i := m.railOffset(); i < len(m.slots) && len(lines) < m.height; i++ {
 		label := fmt.Sprintf(" %d ", i+1)
+		if m.slots[i].Kind == "cloud" {
+			label = fmt.Sprintf(" %d%s", i+1, cloudMarker(m.slots[i].CloudState))
+		}
 		if i == m.current() {
 			label = selected.Render(label)
 		} else {
 			label = muted.Render(label)
 		}
 		lines = append(lines, lipgloss.PlaceHorizontal(railWidth, lipgloss.Left, label))
+		if m.slots[i].Kind == "cloud" && len(lines) < m.height {
+			lines = append(lines, muted.Render(" "+CloudIcon))
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -398,6 +468,12 @@ func (m Model) dashboard(width int) string {
 		return "\n" + "  " + bright.Render("dopamine") + "\n\nenlarge terminal to 46 × 16."
 	}
 	if m.projectOpen && len(m.projects) > 0 {
+		if m.serverSettings {
+			return m.serverSettingsView(width)
+		}
+		if m.cloudHistory {
+			return m.cloudHistoryView(width)
+		}
 		return m.projectView()
 	}
 	if m.addingFolder {
@@ -473,7 +549,11 @@ func (m Model) projectView() string {
 	if m.removingFolder {
 		return strings.Join(append(lines, "remove this folder from the list?", muted.Render("files and open workspaces are kept."), "", "enter: remove · esc: cancel", "", clean(m.status)), "\n")
 	}
-	for i, action := range m.projectActions() {
+	actions := m.projectActions()
+	rows := max(1, m.height-len(lines)-3)
+	start := max(0, m.action-rows+1)
+	for i := start; i < len(actions) && i < start+rows; i++ {
+		action := actions[i]
 		prefix := "  "
 		if i == m.action {
 			prefix = "> "
@@ -494,9 +574,11 @@ func (m Model) helpView() string {
 		"esc          back to projects",
 		"s / x / o    project server actions",
 		"n / t        new codex / project terminal",
+		"c / a        cloud task / server autostart",
 		"1…9          select slot",
 		"alt+1…9      select slot from terminal",
 		"alt+←→       previous / next slot",
+		"rail: ~ cloud work · ✓ done · ! failed",
 		"tab / ⇧tab   next / previous slot",
 		"ctrl+w       close workspace",
 		"q / ctrl+c   exit interface",

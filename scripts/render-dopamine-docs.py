@@ -170,6 +170,13 @@ def main():
     layout = json.loads((source / 'layout.json').read_text())
     screenshot('terminal', [(source / 'terminal-rail.txt', 0),
                             (source / 'terminal-main.txt', layout['rail_columns'] + layout['separator_columns'])], 'native terminal')
+    for name, title in [('cloud-working', 'cloud task · working'),
+                        ('cloud-ready', 'cloud task · completed'),
+                        ('autostart', 'server autostart')]:
+        if (source / (name + '.txt')).exists():
+            rail = source / (name + '-rail.txt')
+            panes = [(rail, 0), (source / (name + '.txt'), 6)] if rail.exists() else [(source / (name + '.txt'), 0)]
+            screenshot(name, panes, title)
     print('Rendered original molecule SVGs, social preview and three screenshots from real captures.')
 
 

@@ -1,0 +1,11 @@
+[1m  codex cloud · Fixture
+
+[0m  status: [1mworking · queued or running[0m
+  checked: 03:16:24
+
+  https://chatgpt.com/codex/tasks/task_e_fixture
+
+[PENDING] cloud smoke fixture fixture environment · now +2/-1 · 1 file
+
+r: refresh · o: result · d: diff · esc: back
+closing this tab keeps the cloud task running.

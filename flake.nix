@@ -13,7 +13,7 @@
           && !(builtins.elem (builtins.baseNameOf path) [ "bin" "result" "node_modules" "__pycache__" ])
           && !(pkgs.lib.hasPrefix "result-" (builtins.baseNameOf path));
       };
-      vendorHash = "sha256-N1XjCz+5I3ge+QUsOGqFbj1s9lw1gpgcgtBmSDg//oc=";
+      vendorHash = "sha256-tb5pH1QqFfDSlpwbQXOoA5ExLfQZTVksjE7WV8Rk8kw=";
       subPackages = [ "cmd/dopamine" ];
       ldflags = [ "-s" "-w" "-X main.Version=0.1.0" ];
       nativeBuildInputs = [ pkgs.makeWrapper ];

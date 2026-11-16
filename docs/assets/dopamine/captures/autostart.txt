@@ -1,0 +1,9 @@
+[1m  server autostart · Fixture[0m
+[7m 1 [0m
+ 2✓     > off · selected
+ ⢔⣊⣑⡢     when dopamine opens
+          at login
+
+        at login runs without dopamine open. when dopamine opens starts once on launch.
+
+        enter: save · esc: back
