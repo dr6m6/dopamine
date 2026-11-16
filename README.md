@@ -100,6 +100,22 @@ Override the automatic discovery directory when launching:
 DOPAMINE_PROJECTS_ROOT="$HOME/work" dopamine
 ```
 
+## Work from a laptop
+
+Use **dopamine-remote** to open the home workspace over SSH. Files, Codex, shells and servers stay on the home computer; reconnect after a network interruption to return to the same tmux sessions. The laptop client supports Void Linux with Python 3 and OpenSSH, without Nix. Dev sites can open in the laptop’s Firefox through a local SSH tunnel.
+
+```sh
+./install-remote.sh
+export PATH="$HOME/.local/bin:$PATH"
+dopamine-remote setup USER@HOME_TAILSCALE_IP --identity ~/.ssh/dopamine-home
+dopamine-remote check
+dopamine-remote
+```
+
+The existing home SSH and network connection must be ready first. The computer stays powered on; sleep and remote wake-up are separate work.
+
+[Connection setup, Void instructions, dev-site forwarding and recovery →](docs/remote-access.md) · [Handoff to Codex on the laptop →](docs/laptop-codex-handoff.md)
+
 ## Cloud tasks and server autostart
 
 Choose **new cloud session** (`c`) for the native Codex terminal connected to Cloud. Use `/model` for the model and reasoning effort. Cloud tabs take one row, with a small `c` beside the number and working/completed/error markers. The existing Codex login and VPN launcher are reused. Previously saved batch tasks remain available through **cloud tasks…**.

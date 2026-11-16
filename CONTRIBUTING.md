@@ -8,7 +8,7 @@ nix develop path:. -c make test
 nix build path:.#dopamine
 ```
 
-`make test` checks Go formatting, runs vet and the race detector, builds dopamine, tests the source launcher and installer, and exercises the real TUI in an isolated tmux. Codex is a fixture in this scenario; no model API calls are made.
+`make test` checks Go formatting, runs vet and the race detector, builds dopamine, tests the source launcher and installer, and exercises the real TUI in an isolated tmux. Remote checks use a temporary OpenSSH server, disposable keys, actual reconnects and HTTP forwarding; the Firefox invocation is a fixture. Codex is a fixture in this scenario; no model API calls are made.
 
 ## Project layout
 

@@ -1,0 +1,273 @@
+#!/usr/bin/env python3
+"""Real OpenSSH, PTY, tmux and HTTP forwarding; disposable keys and projects."""
+import argparse
+import fcntl
+import getpass
+import json
+import os
+from pathlib import Path
+import pty
+import select
+import shlex
+import shutil
+import signal
+import socket
+import struct
+import subprocess
+import sys
+import tempfile
+import termios
+import time
+import urllib.error
+import urllib.request
+
+
+def free_port():
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        return listener.getsockname()[1]
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--binary", default="bin/dopamine")
+    args = parser.parse_args()
+    binary = str(Path(args.binary).resolve())
+    payload = Path(binary).with_name("." + Path(binary).name + "-wrapped")
+    if payload.is_file():
+        binary = str(payload)
+    client = str(Path(__file__).with_name("dopamine-remote.py").resolve())
+    tools_needed = ("sshd", "ssh", "ssh-keygen", "tmux", "bash", "env")
+    tools = {name: shutil.which(name) for name in tools_needed}
+    if not all(tools.values()):
+        raise RuntimeError(f"required tools missing: {tools}")
+    with tempfile.TemporaryDirectory(prefix="dopamine-remote-smoke-") as temp:
+        root = Path(temp)
+        ssh_port, app_port, local_port = free_port(), free_port(), free_port()
+        while len({ssh_port, app_port, local_port}) != 3:
+            local_port = free_port()
+            app_port = free_port()
+        for name in ("host-key", "client-key"):
+            subprocess.run([tools["ssh-keygen"], "-q", "-t", "ed25519", "-N", "", "-f", str(root / name)], check=True)
+        host_key = (root / "host-key.pub").read_text().split()
+        (root / "known-hosts").write_text(f"[127.0.0.1]:{ssh_port} {' '.join(host_key[:2])}\n")
+        sshd_config = root / "sshd.conf"
+        sshd_config.write_text(f"""Port {ssh_port}
+ListenAddress 127.0.0.1
+HostKey {root / 'host-key'}
+PidFile {root / 'sshd.pid'}
+AuthorizedKeysFile {root / 'client-key.pub'}
+AllowUsers {getpass.getuser()}
+StrictModes no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+UsePAM no
+PermitRootLogin prohibit-password
+PrintMotd no
+LogLevel ERROR
+""")
+        ssh_config = root / "ssh.conf"
+        ssh_config.write_text(f"""Host fixture-home
+  HostName 127.0.0.1
+  Port {ssh_port}
+  User {getpass.getuser()}
+  IdentityFile {root / 'client-key'}
+  IdentitiesOnly yes
+  BatchMode yes
+  StrictHostKeyChecking yes
+  UserKnownHostsFile {root / 'known-hosts'}
+  GlobalKnownHostsFile /dev/null
+""")
+        tmux = [tools["tmux"], "-S", str(root / "tmux.sock"), "-f", "/dev/null"]
+        shims = root / "tools"
+        shims.mkdir()
+        (shims / "tmux").write_text("#!/bin/sh\nexec " + shlex.join(tmux) + ' "$@"\n')
+        (shims / "tmux").chmod(0o755)
+        # The browser fixture records the local URL. Network evidence comes
+        # from real HTTP through SSH below, without launching a user profile.
+        (shims / "firefox").write_text("#!" + sys.executable + "\nimport os,sys,time\nfrom pathlib import Path\n"
+                                      "Path(" + repr(str(root / "firefox-args")) + ").write_text('\\n'.join(sys.argv[1:])+'\\n')\n"
+                                      "Path(" + repr(str(root / "firefox-pid")) + ").write_text(str(os.getpid()))\n"
+                                      "while True: time.sleep(1)\n")
+        (shims / "firefox").chmod(0o755)
+        project = root / "project"
+        project.mkdir()
+        (project / "index.html").write_text("dopamine remote HTTP fixture")
+        config = root / "config"
+        config.mkdir()
+        (config / "projects.json").write_text(json.dumps({"projects": [{
+            "id": "fixture", "name": "Fixture", "path": str(project),
+            "app_url": f"http://127.0.0.1:{app_port}/index.html?remote=1#test",
+            "launch": [sys.executable, "-m", "http.server", str(app_port), "--bind", "127.0.0.1"]}]}))
+        env = os.environ.copy()
+        env.update(HOME=temp, XDG_STATE_HOME=str(root / "xdg-state"), XDG_CONFIG_HOME=str(root / "xdg-config"),
+                   CODEX_HOME=str(root / "codex"), PATH=str(shims) + ":" + env["PATH"],
+                   DOPAMINE_CONFIG_DIR=str(config), DOPAMINE_STATE_DIR=str(root / "state"),
+                   DOPAMINE_PROJECTS_ROOT=str(root / "no-discover"), DOPAMINE_EXECUTABLE=binary,
+                   TERM="xterm-256color", SHELL=tools["bash"])
+        for key in ("TMUX", "TMUX_PANE", "DOPAMINE_TUI", "DOPAMINE_DASHBOARD"):
+            env.pop(key, None)
+        wrapper = root / "home-dopamine"
+        assignments = [f"{k}={v}" for k, v in env.items() if k in (
+            "HOME", "PATH", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "CODEX_HOME", "SHELL", "TERM",
+            "DOPAMINE_CONFIG_DIR", "DOPAMINE_STATE_DIR", "DOPAMINE_PROJECTS_ROOT", "DOPAMINE_EXECUTABLE")]
+        wrapper.write_text("#!/bin/sh\nunset TMUX TMUX_PANE DOPAMINE_TUI DOPAMINE_DASHBOARD\nexec " +
+                           shlex.join([tools["env"], *assignments, binary]) + ' "$@"\n')
+        wrapper.chmod(0o755)
+        profile = root / "remote.json"
+        base = [sys.executable, client, "--config", str(profile)]
+        subprocess.run(base + ["setup", "fixture-home", "--ssh-config", str(ssh_config), "--command", str(wrapper)], env=env, check=True)
+        sshd_log = (root / "sshd.log").open("w+")
+        sshd = subprocess.Popen([tools["sshd"], "-D", "-e", "-f", str(sshd_config)], stdout=sshd_log, stderr=sshd_log)
+        clients = []
+        terminal_output = bytearray()
+        tunnel = None
+
+        def command(*parts):
+            return subprocess.check_output(tmux + list(parts), env=env, text=True, stderr=subprocess.DEVNULL).strip()
+
+        def wait_for(check, description, timeout=20):
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                for process, master in clients:
+                    while select.select([master], [], [], 0)[0]:
+                        try:
+                            terminal_output.extend(os.read(master, 65536))
+                        except OSError:
+                            break
+                try:
+                    if check():
+                        return
+                except (OSError, subprocess.CalledProcessError, urllib.error.URLError, StopIteration):
+                    pass
+                if sshd.poll() is not None:
+                    sshd_log.seek(0)
+                    raise AssertionError("sshd exited: " + sshd_log.read())
+                time.sleep(0.05)
+            try:
+                screen = command("capture-pane", "-p", "-t", "dopamine:")
+            except subprocess.CalledProcessError:
+                screen = "no dashboard"
+            raise AssertionError(description + "\n" + screen + "\nPTY: " + terminal_output.decode(errors="replace")[-4000:])
+
+        def accepting():
+            with socket.create_connection(("127.0.0.1", ssh_port), timeout=0.1):
+                return True
+
+        def connect():
+            master, slave = pty.openpty()
+            fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
+            # Give the SSH child a controlling terminal, as in a real terminal.
+            process = subprocess.Popen([tools["bash"], "-c", 'exec "$@"', "remote", *base, "connect"],
+                                       stdin=slave, stdout=slave, stderr=slave, env=env,
+                                       start_new_session=True)
+            os.close(slave)
+            clients.append((process, master))
+            return process, master
+
+        try:
+            wait_for(accepting, "isolated SSH server did not listen")
+            subprocess.run(base + ["check"], env=env, check=True, timeout=30)
+            first, first_pty = connect()
+            wait_for(lambda: "Fixture" in command("capture-pane", "-p", "-t", "dopamine:"), "home dashboard did not open through SSH")
+            wait_for(lambda: bool(command("list-clients", "-F", "#{client_session}")), "SSH client did not attach to the dashboard")
+            os.write(first_pty, b"\r")
+            wait_for(lambda: "start server" in command("capture-pane", "-p", "-t", "dopamine:"), "remote project menu did not open")
+            os.write(first_pty, b"s")
+            record_path = root / "state/runs/app-fixture.json"
+            wait_for(record_path.exists, "remote dev server did not start")
+            wait_for(lambda: "server started" in command("capture-pane", "-p", "-t", "dopamine:"), "server start did not finish")
+            app_record = json.loads(record_path.read_text())
+            os.write(first_pty, b"t")
+            wait_for(lambda: any((root / "state/runs").glob("shell-*.json")), "remote shell did not open")
+            shell = json.loads(next((root / "state/runs").glob("shell-*.json")).read_text())
+            pane = shell["Pane"]
+            wait_for(lambda: command("display-message", "-p", "-t", "dopamine:", "#{pane_id}") == pane
+                     and "$" in command("capture-pane", "-p", "-t", pane), "remote shell was not ready for input")
+            pid = command("display-message", "-p", "-t", pane, "#{pane_pid}")
+            marker = root / "session-marker"
+            os.write(first_pty, ("printf persisted > " + shlex.quote(str(marker)) + "\r").encode())
+            wait_for(marker.exists, "remote SSH keyboard input did not reach the shell")
+            # Terminate the actual SSH client. Python is its foreground parent;
+            # use the parent's child, without killing the detached home tmux.
+            children = Path(f"/proc/{first.pid}/task/{first.pid}/children").read_text().split()
+            assert len(children) == 1, children
+            os.kill(int(children[0]), signal.SIGTERM)
+            first.wait(timeout=10)
+            wait_for(lambda: not command("list-clients", "-F", "#{client_session}"), "SSH disconnect did not detach")
+            assert command("display-message", "-p", "-t", pane, "#{pane_pid}") == pid
+            second, second_pty = connect()
+            wait_for(lambda: bool(command("list-clients", "-F", "#{client_session}")), "SSH reconnect did not attach")
+            os.write(second_pty, b"\x1b2")
+            wait_for(lambda: command("display-message", "-p", "-t", "dopamine:", "#{pane_id}") == pane, "reconnect could not return to the existing shell")
+            assert command("display-message", "-p", "-t", pane, "#{pane_pid}") == pid
+            assert json.loads(record_path.read_text())["Token"] == app_record["Token"]
+            tunnel_log = (root / "tunnel.log").open("w+")
+            tunnel = subprocess.Popen(base + ["open", "fixture", "--local-port", str(local_port)], env=env,
+                                      stdout=tunnel_log, stderr=tunnel_log, start_new_session=True)
+            local_url = f"http://127.0.0.1:{local_port}/index.html?remote=1#test"
+            wait_for(lambda: (root / "firefox-args").exists(), "Firefox was not handed the forwarded local URL")
+            assert (root / "firefox-args").read_text().splitlines() == ["--new-tab", local_url]
+            with urllib.request.urlopen(local_url, timeout=5) as response:
+                assert response.read() == b"dopamine remote HTTP fixture"
+            assert tunnel.poll() is None
+            os.killpg(tunnel.pid, signal.SIGINT)
+            tunnel.wait(timeout=10)
+            browser_pid = int((root / "firefox-pid").read_text())
+            os.kill(browser_pid, 0)
+            with socket.socket() as listener:
+                listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                listener.bind(("127.0.0.1", local_port))
+            tunnel = subprocess.Popen(base + ["open", "fixture", "--local-port", str(local_port), "--no-browser"], env=env,
+                                      stdout=tunnel_log, stderr=tunnel_log, start_new_session=True)
+
+            def forwarded():
+                with urllib.request.urlopen(local_url, timeout=0.2) as response:
+                    return response.read() == b"dopamine remote HTTP fixture"
+
+            wait_for(forwarded, "the same dev-server port could not be reopened after HTTP and tunnel close")
+            occupied = subprocess.run(base + ["open", "fixture", "--local-port", str(local_port), "--no-browser"],
+                                      env=env, capture_output=True, text=True, timeout=30)
+            assert occupied.returncode == 1 and "unavailable" in occupied.stderr, occupied.stderr
+            os.killpg(tunnel.pid, signal.SIGINT)
+            tunnel.wait(timeout=10)
+            assert command("display-message", "-p", "-t", pane, "#{pane_pid}") == pid
+            print("remote SSH scenario passed: real TUI input, server start, reconnect with same shell PID, HTTP forwarding, Firefox survives Ctrl+C, tunnel cleanup/reopen and occupied-port rejection")
+        finally:
+            for process, master in clients:
+                if process.poll() is None:
+                    os.killpg(process.pid, signal.SIGTERM)
+                    process.wait(timeout=5)
+                os.close(master)
+            if tunnel is not None and tunnel.poll() is None:
+                os.killpg(tunnel.pid, signal.SIGINT)
+                tunnel.wait(timeout=10)
+            if (root / "firefox-pid").exists():
+                try:
+                    os.kill(int((root / "firefox-pid").read_text()), signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+            # tmux returns from kill-server before its shells finish writing
+            # history. Wait for these exact fixture processes before removing
+            # their temporary HOME; otherwise cleanup races with .bash_history.
+            pane_pids = subprocess.run(tmux + ["list-panes", "-a", "-F", "#{pane_pid}"], env=env,
+                                       capture_output=True, text=True).stdout.split()
+            subprocess.run(tmux + ["kill-server"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            def alive(pid):
+                try:
+                    return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0] != "Z"
+                except FileNotFoundError:
+                    return False
+
+            deadline = time.monotonic() + 5
+            while any(alive(pid) for pid in pane_pids) and time.monotonic() < deadline:
+                time.sleep(0.05)
+            sshd.terminate()
+            sshd.wait(timeout=5)
+            sshd_log.close()
+            assert not any(alive(pid) for pid in pane_pids), "fixture tmux processes did not exit"
+
+
+if __name__ == "__main__":
+    main()

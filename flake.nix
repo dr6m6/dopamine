@@ -17,7 +17,7 @@
       subPackages = [ "cmd/dopamine" ];
       ldflags = [ "-s" "-w" "-X main.Version=0.1.0" ];
       nativeBuildInputs = [ pkgs.makeWrapper ];
-      nativeCheckInputs = [ pkgs.git pkgs.tmux pkgs.python3 ];
+      nativeCheckInputs = [ pkgs.git pkgs.tmux pkgs.python3 pkgs.openssh ];
       # Package checks are deterministic. The devShell also runs the
       # isolated tmux interaction scenario without model API calls.
       checkPhase = ''
@@ -26,6 +26,9 @@
       '';
       postInstall = ''
         wrapProgram "$out/bin/dopamine" --set DOPAMINE_EXECUTABLE "$out/bin/dopamine" --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.tmux pkgs.git pkgs.xdg-utils pkgs.libnotify pkgs.python3 pkgs.nodejs pkgs.coreutils pkgs.bash ]}
+        install -Dm755 scripts/dopamine-remote.py "$out/bin/dopamine-remote"
+        patchShebangs "$out/bin/dopamine-remote"
+        wrapProgram "$out/bin/dopamine-remote" --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.openssh pkgs.python3 ]}
         install -Dm644 LICENSE "$out/share/licenses/dopamine/LICENSE"
         install -Dm644 internal/workspace/assets/dopamine.svg "$out/share/icons/hicolor/scalable/apps/dopamine.svg"
       '';
@@ -34,7 +37,7 @@
   in {
     packages.${system} = { default = dopamine; dopamine = dopamine; };
     apps.${system}.default = { type = "app"; program = "${dopamine}/bin/dopamine"; meta.description = "dopamine terminal workspaces"; };
-    devShells.${system}.default = pkgs.mkShell { packages = [ pkgs.go_1_26 pkgs.tmux pkgs.git pkgs.libnotify pkgs.nodejs pkgs.python3 pkgs.gnumake ]; };
+    devShells.${system}.default = pkgs.mkShell { packages = [ pkgs.go_1_26 pkgs.tmux pkgs.git pkgs.libnotify pkgs.nodejs pkgs.python3 pkgs.gnumake pkgs.openssh ]; };
     checks.${system}.package = dopamine;
     nixosModules.default = { config, lib, pkgs, ... }: let cfg = config.programs.dopamine; in {
       options.programs.dopamine.enable = lib.mkEnableOption "dopamine (uses existing codex-vpn)";

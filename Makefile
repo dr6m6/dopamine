@@ -20,8 +20,10 @@ test-dopamine: build ## Check dopamine, installation and real tmux interactions
 	go test ./...
 	python3 -m unittest discover -s scripts -p 'test_*source.py'
 	python3 -m unittest discover -s scripts -p 'test_dopamine_install.py'
+	python3 -m unittest discover -s scripts -p 'test_dopamine_remote.py'
 	python3 scripts/dopamine-smoke.py --binary bin/dopamine
 	python3 scripts/dopamine-cloud-smoke.py --binary bin/dopamine
+	python3 scripts/dopamine-remote-smoke.py --binary bin/dopamine
 
 install: ## Install the source launcher
 	./install.sh
