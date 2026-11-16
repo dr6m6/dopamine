@@ -32,10 +32,51 @@ func TestNativeCloudLaunchUsesOriginalCodexAndInvocationOnlySettings(t *testing.
 		if slices.Contains(args, "cloud") || slices.Contains(args, "exec") {
 			t.Fatal("launched batch task instead of native interactive session", args)
 		}
+		cd := slices.Index(args, "--cd")
+		if cd < 0 || cd+1 >= len(args) || args[cd+1] != client {
+			t.Fatal("native client directory was not pinned", args)
+		}
 		return nil
 	}})
 	if err := s.ExecNativeCloud(); err != nil || !launched {
 		t.Fatal(err, launched)
+	}
+}
+
+func TestNativeCloudTrustChecksLaunchDirectoryWhenCurrentPathIsUnavailable(t *testing.T) {
+	s, _ := fixture(t)
+	r := Record{Key: "cloud-native-demo-path", Kind: NativeCloudKind, Pane: "%42", Token: "owned"}
+	client := filepath.Join(s.StateDir, "native-cloud", r.Key)
+	if err := os.MkdirAll(client, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, start, current string
+		ok                   bool
+	}{
+		{"visible current directory", client, client, true},
+		{"sudo hides current directory", client, "", true},
+		{"missing launch directory", "", "", false},
+		{"different launch directory", s.Home, "", false},
+		{"client changed directory", client, s.Home, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			useRunner(t, stubRunner{output: func(_ context.Context, _ string, args ...string) ([]byte, error) {
+				switch args[len(args)-1] {
+				case "#{pane_current_path}":
+					return []byte(tc.current), nil
+				case "#{pane_start_path}\n#{pane_current_path}":
+					return []byte(tc.start + "\n" + tc.current), nil
+				default:
+					t.Fatal(args)
+					return nil, nil
+				}
+			}})
+			got, err := s.ownedNativeClient(r)
+			if (err == nil) != tc.ok || (tc.ok && got != client) {
+				t.Fatal(got, err)
+			}
+		})
 	}
 }
 func TestNativeCloudRequiresAcknowledgementAndSendsOnlyOneHostKey(t *testing.T) {
@@ -240,8 +281,9 @@ func TestNativeCloudTrustAcceptsOnlyItsOwnEmptyClient(t *testing.T) {
 	useRunner(t, stubRunner{output: func(_ context.Context, _ string, args ...string) ([]byte, error) {
 		switch args[0] {
 		case "display-message":
-			if args[len(args)-1] == "#{pane_current_path}" {
-				return []byte(client), nil
+			if args[len(args)-1] == "#{pane_start_path}\n#{pane_current_path}" {
+				// The production VPN wrapper uses sudo, hiding the current path.
+				return []byte(client + "\n"), nil
 			}
 			return []byte("owned|0|codex | Ready | " + testUUID), nil
 		case "capture-pane":

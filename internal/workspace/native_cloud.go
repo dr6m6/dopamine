@@ -37,6 +37,7 @@ func (s Service) ExecNativeCloud() error {
 		return errors.New("native cloud requires its private client directory")
 	}
 	return s.ExecCodex([]string{
+		"--cd", cwd,
 		"--enable", "tui_multi_backend",
 		"-c", `tui.keymap.global.change_host="alt-f12"`,
 		"-c", `tui.terminal_title=["app-name","run-state","thread-id","used-tokens"]`,
@@ -44,15 +45,22 @@ func (s Service) ExecNativeCloud() error {
 }
 
 func (s Service) ownedNativeClient(r Record) (string, error) {
-	cwd, err := recordTmux(r, "display-message", "-p", "-t", r.Pane, "#{pane_current_path}")
+	paths, err := recordTmux(r, "display-message", "-p", "-t", r.Pane, "#{pane_start_path}\n#{pane_current_path}")
 	if err != nil {
 		return "", err
 	}
 	expected := filepath.Join(s.StateDir, "native-cloud", r.Key)
-	if projectPathKey(cwd) != projectPathKey(expected) {
+	parts := strings.SplitN(paths, "\n", 2)
+	if projectPathKey(parts[0]) != projectPathKey(expected) {
+		return "", errors.New("Cloud client did not start in its private directory")
+	}
+	// tmux cannot read /proc/<pid>/cwd when the VPN launcher runs through
+	// sudo. In that case use the recorded launch directory: ExecNativeCloud
+	// also pins it with --cd before entering that launcher.
+	if len(parts) == 2 && parts[1] != "" && projectPathKey(parts[1]) != projectPathKey(expected) {
 		return "", errors.New("Cloud client left its private directory")
 	}
-	entries, err := os.ReadDir(cwd)
+	entries, err := os.ReadDir(expected)
 	if err != nil {
 		return "", err
 	}
@@ -61,7 +69,7 @@ func (s Service) ownedNativeClient(r Record) (string, error) {
 			return "", errors.New("Cloud client directory contains unexpected files; refusing automatic trust")
 		}
 	}
-	return cwd, nil
+	return expected, nil
 }
 
 func nativeTrustPrompt(screen string) bool {
