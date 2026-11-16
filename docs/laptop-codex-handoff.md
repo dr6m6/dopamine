@@ -15,6 +15,9 @@ Use the existing checkout if one is present; otherwise clone the repository.
 Install only the dependencies missing from the laptop. Reuse existing Tailscale
 configuration. If the laptop is not registered, enable tailscaled using the
 existing runit arrangement and let the owner sign into the HOME PC'S account.
+For a new connection use tailscale up --accept-dns=false, keeping DNS under the
+existing network/VPN manager. Connect to the home Tailscale IP; MagicDNS name
+resolution is not required. Check that DNS and the existing VPN still work.
 Do not create a new tailnet, enable an exit node, change router settings or
 disable host-key checking.
 

@@ -19,10 +19,10 @@ If tailscaled is not already enabled, follow the existing runit setup. For the n
 ```sh
 sudo ln -s /etc/sv/tailscaled /var/service/tailscaled
 sudo sv up tailscaled
-sudo tailscale up
+sudo tailscale up --accept-dns=false
 ```
 
-Do not replace an existing service link or reset an already configured Tailscale connection. Complete the browser sign-in with the same account as the home PC. Check `tailscale status`. This does not require router changes or manual public port forwarding. Home userspace Tailscale can keep its existing configuration; the laptop normally uses the standard TUN setup.
+Do not replace an existing service link or reset an already configured Tailscale connection. Complete the browser sign-in with the same account as the home PC. Check `tailscale status`. Keep DNS under the laptop's existing network/VPN manager: `--accept-dns=false` prevents Tailscale from replacing its resolver with MagicDNS. Use the home Tailscale IP for the connection; automatic resolution of MagicDNS names is not assumed. This does not require router changes or manual public port forwarding. Home userspace Tailscale can keep its existing configuration; the laptop normally uses the standard TUN setup.
 
 Create a dedicated laptop SSH key if one is not already available, preserving existing keys:
 
@@ -86,6 +86,17 @@ The TUI's existing **open url** action still invokes the home desktop handler. U
 - An occupied local port fails explicitly. Choose `--local-port`; the client does not silently attach Firefox to an unrelated listener.
 - Lost SSH connections are detected with keepalives. Re-run the client or `open` command after the network returns.
 
+If DNS stops working after a reboot or VPN connection, inspect `/etc/resolv.conf` and check `getent ahostsv4 chatgpt.com`. A resolver containing only `100.100.100.100` and `fd7a:115c:a1e0::53` is using Tailscale's DNS. If that resolver is unreachable, it can also prevent local Codex from starting (`workspace routing discovery failed`) and stop Tailscale from reaching its control plane. For this IP-based remote setup, return DNS management to the existing network/VPN setup without disconnecting Tailscale:
+
+```sh
+sudo tailscale set --accept-dns=false
+sudo resolvconf -u
+cat /etc/resolv.conf
+getent ahostsv4 chatgpt.com
+```
+
+The `resolvconf -u` command applies to this Void/openresolv setup. Inspect the generated resolver and test the actual lookup; a successful VPN handshake alone does not establish working DNS or provider connectivity. Do not replace `/etc/resolv.conf` manually or change the VPN profile as a first step. See [Tailscale's resolver guidance](https://tailscale.com/docs/reference/faq/dns-resolv-conf).
+
 ## Implementation and verification
 
 Reuse OpenSSH for encryption, authentication, PTYs, port forwarding and connection liveness; reuse the existing home tmux lifecycle. A standalone Python standard-library client keeps the Void installation small and avoids another server, synchronization service or terminal implementation. A fresh Nix installation can also expose the client from the package. No Python dependency is downloaded.
@@ -97,3 +108,5 @@ Sources checked for this choice: [OpenSSH](https://man.openbsd.org/ssh), [SSH co
 A separate check on the owner's NixOS home PC and actual Void Linux laptop passed over Tailscale on the same home LAN. The laptop authenticated with its dedicated key and verified the home host fingerprint, ran `check`, and opened the real home dashboard. An isolated home workspace retained the same shell PID and a shell variable across an interrupted SSH connection and a fresh connection. A dev server started through the TUI returned HTTP 200 through the laptop tunnel, and its page was visually checked in Firefox with a temporary profile. Closing the tunnel released the local port while leaving the home server available; the disposable processes were then stopped. The home side also checked the SSH authentication log, matching shell evidence and successful HTTP requests independently of the laptop report.
 
 Access from a separate external network is still unverified. Repeat `check` and `connect` with the laptop on mobile internet before relying on this setup away from home. Sleep, wake-up and home reboot recovery remain outside this feature.
+
+A reboot-time DNS failure was also reproduced on the Void laptop: its resolver contained only Tailscale DNS addresses, local Codex reported a DNS lookup failure, and the laptop appeared offline in the tailnet despite a running tailscaled service and a recent VPN handshake. Applying `tailscale set --accept-dns=false` and regenerating the openresolv resolver restored the existing VPN DNS servers. The laptop then resolved `chatgpt.com`, connected its Codex Responses WebSocket with HTTP 101, and passed all four network-only doctor checks. The owner then confirmed that the usual `codex --not-so-yolo` command opened the interface without the routing error.
