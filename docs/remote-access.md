@@ -78,7 +78,33 @@ A URL must use local HTTP(S), just like `app_url`.
 There is no need to register the mockup, change its bind address, or repeat the
 home username, IP or key. Start the mockup on the home computer first.
 
-This reads that project's `app_url`, creates an SSH local forward bound only to laptop `127.0.0.1`, and opens the corresponding local URL in Firefox. The path, query and fragment are preserved. Keep this terminal open while using the site. Ctrl+C stops only this tunnel, retaining the home dev server and workspaces.
+This reads that project's `app_url`, creates an SSH local forward bound only to laptop `127.0.0.1`, and opens the corresponding local URL in Firefox. The path, query and fragment are preserved. Keep this terminal open while using the site. Ctrl+C stops the tunnel and its private relay, retaining the home dev server and workspaces.
+
+The home helper first checks the ordinary host network. If the target is not
+listening there, it retries through the existing `vpn-run` launcher. This covers
+mockups started by Codex inside the personal VPN namespace, where `127.0.0.1`
+is separate from the SSH server's loopback. The VPN-side listener is an owner-only
+Unix socket; OpenSSH forwards to that socket through the shared filesystem.
+No firewall rule, public listener, VPN setting, or system service is changed.
+Firefox opens only after the chosen target and relay are ready; a stopped site
+fails in the terminal instead of opening a broken browser tab.
+When opening a registered project with `launch_vpn: true`, automatic selection
+uses its VPN network directly, preserving the project's intended server even
+when the host has another listener on the same port.
+
+If the same port is used by different services in both networks, choose explicitly:
+
+```sh
+dopamine-remote open 42807 --network vpn
+dopamine-remote open 3000 --network host
+```
+
+The default can be saved with `dopamine-remote setup YOUR_EXISTING_DESTINATION
+--site-network vpn`, preserving the saved key and other connection settings.
+The `site_network` field in `remote.json` accepts `auto` (default), `host`, or
+`vpn`. Automatic VPN access requires the existing NixOS `vpn-run` launcher;
+ordinary host sites work without it. Update both the home source and laptop
+client together for this helper protocol.
 
 The default laptop port matches the home server port. If it is occupied, choose another explicitly:
 
@@ -86,7 +112,7 @@ The default laptop port matches the home server port. If it is occupied, choose 
 dopamine-remote open PROJECT_ID --local-port 15173
 ```
 
-Use `--no-browser` to print the URL and keep the tunnel without launching a browser. No other browser is selected automatically. Loopback HTTP(S) targets and dopamine's existing `10.203.31.1:8420` VPN relay are supported. The forwarded target must be reachable from the home SSH server; a service confined inside a separate VPN namespace still needs its existing host relay. A different laptop port or hostname can require the project's usual dev-server origin/HMR configuration. HTTPS still uses the project's own certificate, which must be valid for the local URL.
+Use `--no-browser` to print the URL and keep the tunnel without launching a browser. No other browser is selected automatically. Loopback HTTP(S) targets and dopamine's existing `10.203.31.1:8420` VPN relay are supported. A different laptop port or hostname can require the project's usual dev-server origin/HMR configuration. HTTPS still uses the project's own certificate, which must be valid for the local URL.
 
 The TUI's existing **open url** action still invokes the home desktop handler. Use `dopamine-remote open` for the laptop browser. The client neither starts a stopped server nor changes its configuration.
 
@@ -119,6 +145,37 @@ cannot target the laptop; mirroring the entire desktop clipboard would couple
 unrelated applications. The mouse binding detects SSH from the attaching tmux
 process's environment on Linux, independently of other clients in the shared
 session, and falls back to the original local action otherwise.
+
+## Paste laptop text and screenshots into home Codex
+
+For ordinary text, use the laptop terminal's **Ctrl+Shift+V**. Codex's own
+**Ctrl+V** reads the clipboard on the computer running Codex, so it cannot read
+the laptop's screenshot over ordinary SSH.
+
+To transfer either text or an image explicitly, select the intended running
+Codex tab, then run this in another **local laptop terminal**:
+
+```sh
+dopamine-remote paste
+```
+
+The client reads the laptop's Wayland clipboard with `wl-paste`, prefers a PNG,
+JPEG, WebP or GIF when offered, and otherwise transfers UTF-8 text. Use
+`dopamine-remote paste --text` to choose text explicitly. Void needs
+`wl-clipboard` if it is not already installed.
+
+Images are uploaded over the existing SSH connection settings to private files
+in the home dopamine state directory's `remote-uploads/` folder. Their paths are
+pasted as bracketed input, which Codex [recognizes as image attachments](https://github.com/openai/codex/blob/main/codex-rs/tui/src/bottom_pane/chat_composer/paste_input.rs).
+Uploaded images remain there for the conversation; transient text files and
+failed uploads are removed. Neither machine's clipboard is overwritten, and no
+clipboard contents are synchronized in the background.
+
+The command targets the single live Codex pane in the currently selected shared
+dopamine tab. It refuses dashboard/shell tabs, ambiguous tabs, exited panes, and
+tmux copy mode. The pane token is checked again when pasting. Input is inserted
+without sending Enter; review it in Codex and send it yourself. The maximum
+clipboard size is 32 MiB. ESC/NUL bytes in text are rejected.
 
 ## Diagnose connection problems
 

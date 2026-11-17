@@ -92,6 +92,11 @@ LogLevel ERROR
                                       "Path(" + repr(str(root / "firefox-pid")) + ").write_text(str(os.getpid()))\n"
                                       "while True: time.sleep(1)\n")
         (shims / "firefox").chmod(0o755)
+        (shims / "wl-paste").write_text("#!" + sys.executable + "\nimport sys\nfrom pathlib import Path\n"
+                                       "root=Path(" + repr(str(root)) + ")\n"
+                                       "if '--list-types' in sys.argv: print((root/'clipboard-type').read_text())\n"
+                                       "else: sys.stdout.buffer.write((root/'clipboard-data').read_bytes())\n")
+        (shims / "wl-paste").chmod(0o755)
         project = root / "project"
         project.mkdir()
         (project / "index.html").write_text("dopamine remote HTTP fixture")
@@ -210,10 +215,14 @@ LogLevel ERROR
             # the resulting OSC 52 must travel back through SSH to this PTY.
             mouse_app = root / "mouse-app.py"
             copied_text = "RemoteClipboardЖ"
-            mouse_app.write_text("import os,tty\n"
+            mouse_app.write_text("import os,tty\nfrom pathlib import Path\n"
                                  "tty.setraw(0)\n"
-                                 "print('\\033[?1000h\\033[?1002h\\033[?1006h\\033[2J\\033[H' + " + repr(copied_text) + ", end='', flush=True)\n"
-                                 "while os.read(0, 1) != b'q': pass\n"
+                                 "print('\\033[?1000h\\033[?1002h\\033[?1006h\\033[?2004h\\033[2J\\033[H' + " + repr(copied_text) + ", end='', flush=True)\n"
+                                 "with Path(" + repr(str(root / "paste-input")) + ").open('ab', buffering=0) as output:\n"
+                                 " while True:\n"
+                                 "  data=os.read(0, 1)\n"
+                                 "  if data == b'\\x04': break\n"
+                                 "  output.write(data)\n"
                                  "print('\\033[?1000l\\033[?1002l\\033[?1006l', end='', flush=True)\n")
             os.write(second_pty, (shlex.join([sys.executable, str(mouse_app)]) + "\r").encode())
             wait_for(lambda: command("capture-pane", "-p", "-t", pane).startswith(copied_text), "mouse-aware app not ready")
@@ -242,7 +251,27 @@ LogLevel ERROR
                     time.sleep(0.05)
                 wait_for(lambda: clipboard_arrived(start, copied_text), f"{clicks}-click selection did not reach SSH clipboard")
                 time.sleep(0.5)
-            os.write(second_pty, b"q")
+            # Model Codex's bracketed-paste input without making model calls.
+            command("set-option", "-p", "-t", pane, "@dopamine_kind", "codex")
+            text_payload = "текст с ноутбука\nsecond line\n"
+            (root / "clipboard-type").write_text("text/plain;charset=utf-8")
+            (root / "clipboard-data").write_text(text_payload)
+            subprocess.run(base + ["paste"], env=env, check=True, timeout=30)
+            wait_for(lambda: text_payload.encode() in (root / "paste-input").read_bytes(), "laptop text clipboard did not reach Codex pane")
+            image_data = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC")
+            (root / "clipboard-type").write_text("image/png")
+            (root / "clipboard-data").write_bytes(image_data)
+            subprocess.run(base + ["paste"], env=env, check=True, timeout=30)
+            uploaded = list((root / "state/remote-uploads").glob("*.png"))
+            assert len(uploaded) == 1 and uploaded[0].read_bytes() == image_data
+            wait_for(lambda: str(uploaded[0]).encode() in (root / "paste-input").read_bytes(), "laptop image path did not reach Codex pane")
+            received = (root / "paste-input").read_bytes()
+            assert b"\x1b[200~" in received and b"\x1b[201~" in received, received
+            assert b"\r" not in received, "paste must never submit Enter"
+            command("set-option", "-p", "-t", pane, "@dopamine_kind", "shell")
+            rejected = subprocess.run(base + ["paste"], env=env, capture_output=True, text=True, timeout=30)
+            assert rejected.returncode == 1 and "select a running Codex tab" in rejected.stderr
+            os.write(second_pty, b"\x04")
             # Restore shell terminal modes changed by the disposable mouse app.
             os.write(second_pty, b"stty sane\r")
 
@@ -281,7 +310,7 @@ LogLevel ERROR
             wait_for(forwarded, "arbitrary URL did not forward without a project ID")
             os.killpg(tunnel.pid, signal.SIGINT)
             tunnel.wait(timeout=10)
-            print("remote SSH scenario passed: real TUI input, server start, reconnect with same shell PID, mouse/word/line copy over OSC 52, HTTP forwarding by project/port/URL, Firefox survives Ctrl+C, tunnel cleanup/reopen and occupied-port rejection")
+            print("remote SSH scenario passed: real TUI input, server start, reconnect with same shell PID, mouse/word/line copy over OSC 52, UTF-8 and PNG clipboard transfer without Enter, HTTP forwarding by project/port/URL, Firefox survives Ctrl+C, tunnel cleanup/reopen and occupied-port rejection")
         finally:
             for process, master in clients:
                 if process.poll() is None:

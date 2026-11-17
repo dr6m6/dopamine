@@ -7,6 +7,8 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
+import select
 import shlex
 import shutil
 import socket
@@ -55,6 +57,8 @@ def validate(profile):
         ipaddress.IPv6Address(host)
     if profile.get("port") is not None:
         profile["port"] = port_number(profile["port"])
+    if profile.get("site_network", "auto") not in ("auto", "host", "vpn"):
+        raise ValueError("site_network must be auto, host or vpn")
     for key in ("identity", "ssh_config", "command"):
         value = profile.get(key)
         if value is not None and (not isinstance(value, str) or not value or any(ord(c) < 32 or ord(c) == 127 for c in value)):
@@ -152,19 +156,46 @@ def stop_process(process):
             process.wait()
 
 
-def target_url(profile, target, project=False):
+def target_details(profile, target, project=False):
     if not project and target.isascii() and target.isdecimal():
-        return f"http://127.0.0.1:{port_number(target)}/"
+        return f"http://127.0.0.1:{port_number(target)}/", None
     if not project and "://" in target:
-        return target
+        return target, None
     matches = [p for p in projects(profile) if p["id"] == target]
     if len(matches) != 1:
         raise ValueError("project not found or ambiguous; run dopamine-remote projects, or pass a local URL or port")
-    return matches[0].get("app_url")
+    return matches[0].get("app_url"), "vpn" if matches[0].get("launch_vpn") is True else None
 
 
-def open_target(profile, target, local_port=None, browser=True, project=False):
-    port, forward, url = app_target(target_url(profile, target, project), local_port)
+def target_url(profile, target, project=False):
+    return target_details(profile, target, project)[0]
+
+
+def wait_site_ready(process, timeout=300):
+    deadline = time.monotonic() + timeout
+    line = bytearray()
+    while time.monotonic() < deadline:
+        if select.select([process.stdout], [], [], 0.1)[0]:
+            value = os.read(process.stdout.fileno(), 1)
+            if not value:
+                raise ValueError("home site relay stopped before becoming ready; check the error above")
+            if value == b"\n":
+                status = json.loads(line)
+                if not isinstance(status, dict) or status.get("ready") is not True or status.get("network") not in ("host", "vpn"):
+                    raise ValueError("invalid home site relay response; update home dopamine")
+                return status["network"]
+            line.extend(value)
+            if len(line) > 4096:
+                raise ValueError("invalid home site relay response")
+    raise ValueError("home site relay did not become ready")
+
+
+def open_target(profile, target, local_port=None, browser=True, project=False, network=None):
+    raw, preferred_network = target_details(profile, target, project)
+    port, forward, url = app_target(raw, local_port)
+    network = network or profile.get("site_network", "auto")
+    if network == "auto" and preferred_network:
+        network = preferred_network
     firefox = shutil.which("firefox") if browser else None
     if browser and not firefox:
         raise ValueError("Firefox is required; use --no-browser to open the printed URL yourself")
@@ -178,21 +209,22 @@ def open_target(profile, target, local_port=None, browser=True, project=False):
             raise ValueError(f"local port {port} is unavailable; choose --local-port PORT") from None
     with tempfile.TemporaryDirectory(prefix="dopamine-ssh-") as temp:
         control = Path(temp) / "s"
-        args = ssh_base(profile, control) + ["-N", "-T", "-L", forward, profile["destination"]]
-        process = subprocess.Popen(args)
+        socket_path = "/tmp/dopamine-site-" + secrets.token_hex(16) + "/s"
+        # app_target already validated the target. Parse its forwarding target,
+        # including bracketed IPv6, without another registry request.
+        destination = forward.split(":", 2)[2]
+        host, remote_port = destination.rsplit(":", 1)
+        host = host.strip("[]")
+        relay = remote_command(profile, "remote-site", host, remote_port, socket_path, network)
+        args = ssh_base(profile, control) + ["-T", "-L", f"127.0.0.1:{port}:{socket_path}", profile["destination"], relay]
+        process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         try:
-            deadline = time.monotonic() + 300
-            while not control.exists():
-                if process.poll() is not None:
-                    raise ValueError(f"SSH tunnel failed (exit {process.returncode})")
-                if time.monotonic() >= deadline:
-                    raise ValueError("SSH tunnel did not become ready")
-                time.sleep(0.05)
+            selected_network = wait_site_ready(process)
             # The mux socket is installed after authentication and successful
             # local forwarding. Check the actual master before opening Firefox.
             subprocess.run([shutil.which("ssh"), "-S", str(control), "-O", "check", profile["destination"]],
                            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
-            print(f"{url}\nTunnel active. Keep this terminal open; Ctrl+C closes only this tunnel.", flush=True)
+            print(f"{url}\nHome network: {selected_network}. Tunnel active. Keep this terminal open; Ctrl+C closes only this tunnel.", flush=True)
             if browser:
                 browser_process = subprocess.Popen([firefox, "--new-tab", url], start_new_session=True)
                 try:
@@ -205,7 +237,42 @@ def open_target(profile, target, local_port=None, browser=True, project=False):
             if code:
                 raise ValueError(f"SSH tunnel disconnected (exit {code}); run open again to reconnect")
         finally:
+            process.stdin.close()
             stop_process(process)
+            process.stdout.close()
+
+
+def clipboard_content(text_only=False):
+    reader = shutil.which("wl-paste")
+    if not reader:
+        raise ValueError("wl-paste is required on the laptop (Void: sudo xbps-install -S wl-clipboard)")
+    result = subprocess.run([reader, "--list-types"], capture_output=True, text=True, timeout=5)
+    if result.returncode:
+        raise ValueError("cannot read laptop Wayland clipboard; run paste in a local desktop terminal")
+    types = result.stdout.splitlines()
+    images = ("image/png", "image/jpeg", "image/webp", "image/gif") if not text_only else ()
+    mime = next((mime for mime in (*images, "text/plain;charset=utf-8", "text/plain", "UTF8_STRING") if mime in types), None)
+    if mime is None:
+        raise ValueError("laptop clipboard has no supported image or text")
+    # Bound memory even if a clipboard owner supplies unexpectedly large data.
+    with tempfile.TemporaryFile() as output:
+        subprocess.run([reader, "--no-newline", "--type", mime], stdout=output,
+                       stderr=subprocess.DEVNULL, timeout=15, check=True)
+        output.seek(0)
+        data = output.read((32 << 20) + 1)
+    if not data or len(data) > 32 << 20:
+        raise ValueError("clipboard must contain 1 byte to 32 MiB")
+    return (mime if mime.startswith("image/") else "text/plain"), data
+
+
+def paste_clipboard(profile, text_only=False):
+    mime, data = clipboard_content(text_only)
+    result = subprocess.run(ssh_base(profile) + ["-T", profile["destination"], remote_command(profile, "remote-paste", mime)],
+                            input=data, stdout=subprocess.PIPE, timeout=300)
+    if result.returncode:
+        raise ValueError("clipboard transfer failed; check the error above and select a running Codex tab")
+    status = json.loads(result.stdout)
+    print(f"{'Image' if mime.startswith('image/') else 'Text'} pasted into home Codex ({display(status['pane'])}). Press Enter there when ready to send.")
 
 
 def install(uninstall=False):
@@ -237,6 +304,7 @@ def main(argv=None):
     setup.add_argument("--identity", type=Path)
     setup.add_argument("--ssh-config", type=Path, help="optional OpenSSH config file")
     setup.add_argument("--command", help="home executable path; default: ~/.local/bin/dopamine, then PATH")
+    setup.add_argument("--site-network", choices=("auto", "host", "vpn"), help="default home site network (auto tries host, then existing vpn-run)")
     commands.add_parser("connect", help="attach to home dopamine; repeat after a disconnect (default)")
     commands.add_parser("check", help="check SSH, home dopamine and its project registry")
     commands.add_parser("projects", help="list home project IDs and dev-server URLs")
@@ -245,6 +313,9 @@ def main(argv=None):
     opening.add_argument("--project", action="store_true", help="treat target as a project ID, including numeric IDs")
     opening.add_argument("--local-port", type=int)
     opening.add_argument("--no-browser", action="store_true")
+    opening.add_argument("--network", choices=("auto", "host", "vpn"), help="override the saved home site network")
+    pasting = commands.add_parser("paste", help="paste laptop clipboard text or an image into the current home Codex tab")
+    pasting.add_argument("--text", action="store_true", help="prefer text even if the clipboard also offers an image")
     installing = commands.add_parser("install", help="install this standalone client into ~/.local/bin")
     installing.add_argument("--uninstall", action="store_true")
     args = parser.parse_args(argv)
@@ -255,6 +326,8 @@ def main(argv=None):
         profile = {"destination": args.destination}
         if args.port is not None:
             profile["port"] = args.port
+        if args.site_network is not None:
+            profile["site_network"] = args.site_network
         for key in ("identity", "ssh_config", "command"):
             value = getattr(args, key)
             if value is not None:
@@ -278,7 +351,9 @@ def main(argv=None):
         for project in projects(profile):
             print(display(project["id"]) + "\t" + display(project.get("app_url", "")))
     elif args.action == "open":
-        open_target(profile, args.target, args.local_port, not args.no_browser, args.project)
+        open_target(profile, args.target, args.local_port, not args.no_browser, args.project, args.network)
+    elif args.action == "paste":
+        paste_clipboard(profile, args.text)
     else:
         print("Connecting to home dopamine. Re-run this command after a disconnect.\n"
               "Sites on this laptop: dopamine-remote open PROJECT, URL or PORT (in another terminal).\n"

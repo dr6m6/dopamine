@@ -39,6 +39,14 @@ func run(args []string) error {
 			}
 			return json.NewEncoder(os.Stdout).Encode(r)
 		// Private tmux callbacks also retain compatibility with existing runs.
+		case "remote-site":
+			if len(args) == 5 {
+				return s.RemoteSite(args[1], args[2], args[3], args[4])
+			}
+		case "remote-paste":
+			if len(args) == 2 {
+				return s.PasteRemoteClipboard(args[1], os.Stdin)
+			}
 		case "is-ssh-client":
 			if len(args) == 2 && workspace.IsSSHClient(args[1]) {
 				return nil

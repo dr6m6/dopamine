@@ -77,6 +77,8 @@ class RemoteTests(unittest.TestCase):
                 remote.target_url({}, "demo")
         with patch.object(remote, "projects", return_value=[{"id": "42807", "app_url": "http://localhost:5173/"}]):
             self.assertEqual(remote.target_url({}, "42807", project=True), "http://localhost:5173/")
+        with patch.object(remote, "projects", return_value=[{"id": "vpn-app", "app_url": "http://localhost:5173/", "launch_vpn": True}]):
+            self.assertEqual(remote.target_details({}, "vpn-app"), ("http://localhost:5173/", "vpn"))
 
     def test_setup_preserves_unknown_fields_and_has_private_permissions(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -85,6 +87,38 @@ class RemoteTests(unittest.TestCase):
             remote.main(["--config", str(path), "setup", "user@home"])
             self.assertEqual(json.loads(path.read_text())["future"], {"keep": True})
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_site_network_config_is_validated_and_preserved(self):
+        for network in ("auto", "host", "vpn"):
+            self.assertEqual(remote.validate({"destination": "home", "site_network": network})["site_network"], network)
+        with self.assertRaises(ValueError):
+            remote.validate({"destination": "home", "site_network": "other"})
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "remote.json"
+            path.write_text(json.dumps({"destination": "home", "identity": "/tmp/key", "future": True}))
+            remote.main(["--config", str(path), "setup", "home", "--site-network", "vpn"])
+            self.assertEqual(json.loads(path.read_text())["identity"], "/tmp/key")
+            self.assertEqual(json.loads(path.read_text())["site_network"], "vpn")
+
+    def test_relay_ready_requires_a_complete_valid_handshake(self):
+        class Process:
+            pass
+        for response, expected in ((b'{"ready":true,"network":"vpn"}\n', "vpn"),
+                                   (b'{"ready":true,"network":"host"}\n', "host"),
+                                   (b'{"ready":false}\n', None), (b'', None)):
+            read, write = os.pipe()
+            process = Process()
+            process.stdout = os.fdopen(read, "rb")
+            os.write(write, response)
+            os.close(write)
+            try:
+                if expected:
+                    self.assertEqual(remote.wait_site_ready(process, timeout=1), expected)
+                else:
+                    with self.assertRaises(ValueError):
+                        remote.wait_site_ready(process, timeout=1)
+            finally:
+                process.stdout.close()
 
     def test_installer_preserves_foreign_or_modified_commands_and_settings(self):
         with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, {"HOME": temp, "XDG_STATE_HOME": temp + "/state"}):
