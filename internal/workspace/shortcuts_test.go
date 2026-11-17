@@ -3,11 +3,77 @@ package workspace
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
+	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
+
+func TestSSHClientDetectionUsesAttachingProcess(t *testing.T) {
+	for _, ssh := range []bool{false, true} {
+		cmd := exec.Command("sh", "-c", "printf ready; read -r line")
+		cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
+		if ssh {
+			cmd.Env = append(cmd.Env, "SSH_TTY=/dev/pts/123", "SSH_CONNECTION=127.0.0.1 1234 127.0.0.1 22")
+		}
+		ready, err := cmd.StdoutPipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		input, err := cmd.StdinPipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		_, readyErr := io.ReadFull(ready, make([]byte, len("ready")))
+		got := IsSSHClient(strconv.Itoa(cmd.Process.Pid))
+		_ = input.Close()
+		_ = cmd.Wait()
+		if readyErr != nil || got != ssh {
+			t.Fatalf("remote=%v, want %v, readiness error=%v", got, ssh, readyErr)
+		}
+		if IsSSHClient(strconv.Itoa(cmd.Process.Pid)) {
+			t.Fatal("exited process still treated as remote")
+		}
+	}
+	for _, pid := range []string{"", "0", "-1", "../self", "self", "123;exit", "001"} {
+		if IsSSHClient(pid) {
+			t.Fatalf("invalid pid accepted: %q", pid)
+		}
+	}
+}
+
+func TestRemoteSelectionPreservesLocalBindings(t *testing.T) {
+	s, _ := fixture(t)
+	s.Executable = "/path with spaces/dopamine"
+	var calls [][]string
+	useRunner(t, stubRunner{output: func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if name != "tmux" {
+			t.Fatal(name)
+		}
+		calls = append(calls, args)
+		return nil, nil
+	}})
+	root := "bind-key -T root MouseDrag1Pane if-shell -F '#{mouse_any_flag}' { send-keys -M } { copy-mode -M }\n" +
+		"bind-key -T root DoubleClick1Pane display-message custom-double-click\n"
+	if err := s.configureRemoteSelection(root); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 2 || calls[0][3] != "MouseDrag1Pane" || calls[1][3] != "DoubleClick1Pane" {
+		t.Fatal("must preserve deliberately unbound triple click", calls)
+	}
+	if calls[0][7] != "if-shell -F '#{mouse_any_flag}' { send-keys -M } { copy-mode -M }" || calls[1][7] != "display-message custom-double-click" {
+		t.Fatal("local mouse action changed", calls)
+	}
+	if calls[0][6] != "copy-mode -M" || !strings.Contains(calls[0][5], "'/path with spaces/dopamine'") || !strings.Contains(calls[0][5], "#{client_pid}") {
+		t.Fatal("remote copy lost client identity or executable quoting", calls)
+	}
+}
 
 func TestHubShortcutsPreserveRootAndUseNativeConfirmation(t *testing.T) {
 	s, _ := fixture(t)

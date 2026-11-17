@@ -39,6 +39,11 @@ func run(args []string) error {
 			}
 			return json.NewEncoder(os.Stdout).Encode(r)
 		// Private tmux callbacks also retain compatibility with existing runs.
+		case "is-ssh-client":
+			if len(args) == 2 && workspace.IsSSHClient(args[1]) {
+				return nil
+			}
+			return fmt.Errorf("client is not connected over SSH")
 		case "exec-codex":
 			return s.ExecCodex(args[1:])
 		case "cloud-task":

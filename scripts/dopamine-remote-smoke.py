@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Real OpenSSH, PTY, tmux and HTTP forwarding; disposable keys and projects."""
 import argparse
+import base64
 import fcntl
 import getpass
 import json
@@ -203,6 +204,48 @@ LogLevel ERROR
             wait_for(lambda: command("display-message", "-p", "-t", "dopamine:", "#{pane_id}") == pane, "reconnect could not return to the existing shell")
             assert command("display-message", "-p", "-t", pane, "#{pane_pid}") == pid
             assert json.loads(record_path.read_text())["Token"] == app_record["Token"]
+
+            # A mouse-aware app (like Codex) must not consume SSH selections
+            # and copy on the home desktop. Exercise real SGR mouse input;
+            # the resulting OSC 52 must travel back through SSH to this PTY.
+            mouse_app = root / "mouse-app.py"
+            copied_text = "RemoteClipboardЖ"
+            mouse_app.write_text("import os,tty\n"
+                                 "tty.setraw(0)\n"
+                                 "print('\\033[?1000h\\033[?1002h\\033[?1006h\\033[2J\\033[H' + " + repr(copied_text) + ", end='', flush=True)\n"
+                                 "while os.read(0, 1) != b'q': pass\n"
+                                 "print('\\033[?1000l\\033[?1002l\\033[?1006l', end='', flush=True)\n")
+            os.write(second_pty, (shlex.join([sys.executable, str(mouse_app)]) + "\r").encode())
+            wait_for(lambda: command("capture-pane", "-p", "-t", pane).startswith(copied_text), "mouse-aware app not ready")
+            left, top = map(int, command("display-message", "-p", "-t", pane, "#{pane_left} #{pane_top}").split())
+
+            def mouse(code, x, y, release=False):
+                os.write(second_pty, f"\x1b[<{code};{left + x + 1};{top + y + 1}{'m' if release else 'M'}".encode())
+
+            def clipboard_arrived(start, expected):
+                data = bytes(terminal_output[start:])
+                return b"\x1b]52;" in data and base64.b64encode(expected.encode()) in data
+
+            start = len(terminal_output)
+            mouse(0, 0, 0)
+            mouse(32, len(copied_text), 0)
+            time.sleep(0.15)
+            mouse(0, len(copied_text), 0, release=True)
+            wait_for(lambda: clipboard_arrived(start, copied_text), "mouse selection did not send UTF-8 OSC 52 through SSH")
+            assert command("show-buffer") == copied_text
+            time.sleep(0.5)
+            for clicks in (2, 3):
+                start = len(terminal_output)
+                for _ in range(clicks):
+                    mouse(0, 3, 0)
+                    mouse(0, 3, 0, release=True)
+                    time.sleep(0.05)
+                wait_for(lambda: clipboard_arrived(start, copied_text), f"{clicks}-click selection did not reach SSH clipboard")
+                time.sleep(0.5)
+            os.write(second_pty, b"q")
+            # Restore shell terminal modes changed by the disposable mouse app.
+            os.write(second_pty, b"stty sane\r")
+
             tunnel_log = (root / "tunnel.log").open("w+")
             tunnel = subprocess.Popen(base + ["open", "fixture", "--local-port", str(local_port)], env=env,
                                       stdout=tunnel_log, stderr=tunnel_log, start_new_session=True)
@@ -219,7 +262,7 @@ LogLevel ERROR
             with socket.socket() as listener:
                 listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 listener.bind(("127.0.0.1", local_port))
-            tunnel = subprocess.Popen(base + ["open", "fixture", "--local-port", str(local_port), "--no-browser"], env=env,
+            tunnel = subprocess.Popen(base + ["open", str(app_port), "--local-port", str(local_port), "--no-browser"], env=env,
                                       stdout=tunnel_log, stderr=tunnel_log, start_new_session=True)
 
             def forwarded():
@@ -233,7 +276,12 @@ LogLevel ERROR
             os.killpg(tunnel.pid, signal.SIGINT)
             tunnel.wait(timeout=10)
             assert command("display-message", "-p", "-t", pane, "#{pane_pid}") == pid
-            print("remote SSH scenario passed: real TUI input, server start, reconnect with same shell PID, HTTP forwarding, Firefox survives Ctrl+C, tunnel cleanup/reopen and occupied-port rejection")
+            tunnel = subprocess.Popen(base + ["open", f"http://127.0.0.1:{app_port}/index.html?direct=1#url", "--local-port", str(local_port), "--no-browser"],
+                                      env=env, stdout=tunnel_log, stderr=tunnel_log, start_new_session=True)
+            wait_for(forwarded, "arbitrary URL did not forward without a project ID")
+            os.killpg(tunnel.pid, signal.SIGINT)
+            tunnel.wait(timeout=10)
+            print("remote SSH scenario passed: real TUI input, server start, reconnect with same shell PID, mouse/word/line copy over OSC 52, HTTP forwarding by project/port/URL, Firefox survives Ctrl+C, tunnel cleanup/reopen and occupied-port rejection")
         finally:
             for process, master in clients:
                 if process.poll() is None:

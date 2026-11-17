@@ -58,6 +58,26 @@ class RemoteTests(unittest.TestCase):
         self.assertEqual(args[args.index("-p") + 1], "2222")
         self.assertEqual(args[args.index("-i") + 1], "/tmp/key with spaces")
 
+    def test_arbitrary_mockup_does_not_require_a_project_registry(self):
+        with patch.object(remote, "projects", side_effect=AssertionError("registry should not be read")):
+            self.assertEqual(remote.target_url({}, "42807"), "http://127.0.0.1:42807/")
+            self.assertEqual(remote.app_target(remote.target_url({}, "http://127.0.0.1:42807/a?q=1#x")),
+                             (42807, "127.0.0.1:42807:127.0.0.1:42807", "http://127.0.0.1:42807/a?q=1#x"))
+            for target in ("0", "65536", "00428", "http://example.com/", "file:///etc/passwd"):
+                with self.subTest(target=target), self.assertRaises(ValueError):
+                    remote.app_target(remote.target_url({}, target))
+
+    def test_project_open_remains_supported_and_rejects_ambiguous_ids(self):
+        with patch.object(remote, "projects", return_value=[{"id": "demo", "app_url": "http://localhost:5173/"}]):
+            self.assertEqual(remote.target_url({}, "demo"), "http://localhost:5173/")
+            with self.assertRaises(ValueError):
+                remote.target_url({}, "missing")
+        with patch.object(remote, "projects", return_value=[{"id": "demo"}, {"id": "demo"}]):
+            with self.assertRaises(ValueError):
+                remote.target_url({}, "demo")
+        with patch.object(remote, "projects", return_value=[{"id": "42807", "app_url": "http://localhost:5173/"}]):
+            self.assertEqual(remote.target_url({}, "42807", project=True), "http://localhost:5173/")
+
     def test_setup_preserves_unknown_fields_and_has_private_permissions(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "remote.json"

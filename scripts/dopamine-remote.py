@@ -152,11 +152,19 @@ def stop_process(process):
             process.wait()
 
 
-def open_project(profile, project_id, local_port=None, browser=True):
-    matches = [p for p in projects(profile) if p["id"] == project_id]
+def target_url(profile, target, project=False):
+    if not project and target.isascii() and target.isdecimal():
+        return f"http://127.0.0.1:{port_number(target)}/"
+    if not project and "://" in target:
+        return target
+    matches = [p for p in projects(profile) if p["id"] == target]
     if len(matches) != 1:
-        raise ValueError("project not found or ambiguous; run dopamine-remote projects")
-    port, forward, url = app_target(matches[0].get("app_url"), local_port)
+        raise ValueError("project not found or ambiguous; run dopamine-remote projects, or pass a local URL or port")
+    return matches[0].get("app_url")
+
+
+def open_target(profile, target, local_port=None, browser=True, project=False):
+    port, forward, url = app_target(target_url(profile, target, project), local_port)
     firefox = shutil.which("firefox") if browser else None
     if browser and not firefox:
         raise ValueError("Firefox is required; use --no-browser to open the printed URL yourself")
@@ -232,8 +240,9 @@ def main(argv=None):
     commands.add_parser("connect", help="attach to home dopamine; repeat after a disconnect (default)")
     commands.add_parser("check", help="check SSH, home dopamine and its project registry")
     commands.add_parser("projects", help="list home project IDs and dev-server URLs")
-    opening = commands.add_parser("open", help="forward a project's dev server and open it in local Firefox")
-    opening.add_argument("project", help="project ID from projects")
+    opening = commands.add_parser("open", help="open a home project, local URL or port in laptop Firefox")
+    opening.add_argument("target", help="project ID, home URL (http://127.0.0.1:PORT/...), or port")
+    opening.add_argument("--project", action="store_true", help="treat target as a project ID, including numeric IDs")
     opening.add_argument("--local-port", type=int)
     opening.add_argument("--no-browser", action="store_true")
     installing = commands.add_parser("install", help="install this standalone client into ~/.local/bin")
@@ -269,10 +278,11 @@ def main(argv=None):
         for project in projects(profile):
             print(display(project["id"]) + "\t" + display(project.get("app_url", "")))
     elif args.action == "open":
-        open_project(profile, args.project, args.local_port, not args.no_browser)
+        open_target(profile, args.target, args.local_port, not args.no_browser, args.project)
     else:
         print("Connecting to home dopamine. Re-run this command after a disconnect.\n"
-              "Dev sites on this laptop: dopamine-remote open PROJECT (in another terminal).", flush=True)
+              "Sites on this laptop: dopamine-remote open PROJECT, URL or PORT (in another terminal).\n"
+              "Copy visible text locally: Shift+mouse selection, then Ctrl+Shift+C.", flush=True)
         code = subprocess.call(ssh_base(profile) + ["-t", profile["destination"], remote_command(profile)])
         if code:
             print(f"SSH ended (exit {code}); home tmux sessions are retained while the PC stays running.", file=sys.stderr)

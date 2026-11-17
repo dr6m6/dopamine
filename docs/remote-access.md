@@ -65,6 +65,19 @@ dopamine-remote projects
 dopamine-remote open PROJECT_ID
 ```
 
+For a running mockup or any local home site that is not in the project registry,
+pass its port or full URL instead. Both forms reuse the saved SSH connection:
+
+```sh
+dopamine-remote open 42807
+dopamine-remote open 'http://127.0.0.1:42807/preview?mode=mobile#screen'
+```
+
+A numeric target is a port; use `open --project 123` for a numeric project ID.
+A URL must use local HTTP(S), just like `app_url`.
+There is no need to register the mockup, change its bind address, or repeat the
+home username, IP or key. Start the mockup on the home computer first.
+
 This reads that project's `app_url`, creates an SSH local forward bound only to laptop `127.0.0.1`, and opens the corresponding local URL in Firefox. The path, query and fragment are preserved. Keep this terminal open while using the site. Ctrl+C stops only this tunnel, retaining the home dev server and workspaces.
 
 The default laptop port matches the home server port. If it is occupied, choose another explicitly:
@@ -76,6 +89,36 @@ dopamine-remote open PROJECT_ID --local-port 15173
 Use `--no-browser` to print the URL and keep the tunnel without launching a browser. No other browser is selected automatically. Loopback HTTP(S) targets and dopamine's existing `10.203.31.1:8420` VPN relay are supported. The forwarded target must be reachable from the home SSH server; a service confined inside a separate VPN namespace still needs its existing host relay. A different laptop port or hostname can require the project's usual dev-server origin/HMR configuration. HTTPS still uses the project's own certificate, which must be valid for the local URL.
 
 The TUI's existing **open url** action still invokes the home desktop handler. Use `dopamine-remote open` for the laptop browser. The client neither starts a stopped server nor changes its configuration.
+
+## Copy text to the laptop
+
+In a current home dopamine, dragging with the mouse over an SSH connection uses
+tmux selection, including inside mouse-aware Codex panes. Releasing the mouse
+copies through OSC 52 to the laptop terminal. Double click selects a word;
+triple click selects a line. The desktop client's existing mouse bindings,
+click actions, and wheel scrolling are preserved. Reconnect to home dopamine
+after updating its source launcher to refresh the session's bindings; existing
+Codex processes can stay running.
+
+The laptop terminal must accept OSC 52 clipboard writes (foot and Kitty support
+this). The home tmux must retain its usual `set-clipboard external` or `on` and
+the client's `Ms` capability. Dopamine does not override global clipboard policy,
+change terminal profiles, or synchronize the home desktop clipboard. If the same
+pane is visible on both machines, tmux may deliver its copied selection to both
+attached terminals.
+
+For visible text, **Shift+drag**, then **Ctrl+Shift+C** is also available in foot
+and Kitty: this selects in the laptop terminal itself and bypasses the remote
+application's mouse handling. No update of the remote client is needed for this
+shortcut. Ctrl+Shift+C alone cannot copy Codex's own selection: that selection
+belongs to the application on the home computer.
+
+Implementation choice: reuse tmux's [OSC 52 clipboard support](https://github.com/tmux/tmux/wiki/Clipboard)
+and OpenSSH's existing terminal stream. Home clipboard tools such as `wl-copy`
+cannot target the laptop; mirroring the entire desktop clipboard would couple
+unrelated applications. The mouse binding detects SSH from the attaching tmux
+process's environment on Linux, independently of other clients in the shared
+session, and falls back to the original local action otherwise.
 
 ## Diagnose connection problems
 
