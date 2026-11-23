@@ -166,7 +166,7 @@ func (u codexUsage) resetCount() string {
 
 func usageMeter(width int, percent float64) string {
 	filled := int(math.Round(float64(width) * percent / 100))
-	return usageFilled.Render(strings.Repeat("█", filled)) + muted.Render(strings.Repeat("░", width-filled))
+	return usageFilled.Render(strings.Repeat("─", filled)) + muted.Render(strings.Repeat("─", width-filled))
 }
 
 func (u codexUsage) meters(width int, now time.Time) []string {

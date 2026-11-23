@@ -41,7 +41,7 @@ func TestWeeklyOnlyUsageAndResetCredits(t *testing.T) {
 	}
 	u := readCodexUsage()
 	summary := ansi.Strip(strings.Join(u.meters(38, updated.Add(5*time.Minute)), "\n"))
-	for _, label := range []string{"codex usage", "7d 13% · reset 1h 55m", "█", "░"} {
+	for _, label := range []string{"codex usage", "7d 13% · reset 1h 55m", "──────────"} {
 		if !strings.Contains(summary, label) {
 			t.Fatalf("missing %q in %q", label, summary)
 		}
@@ -65,14 +65,20 @@ func TestWeeklyOnlyUsageAndResetCredits(t *testing.T) {
 func TestUsageMeterSegments(t *testing.T) {
 	for _, tc := range []struct {
 		percent float64
-		cells   string
-	}{{0, "░░░░░░░░░░"}, {36, "████░░░░░░"}, {100, "██████████"}} {
+		filled  int
+	}{{0, 0}, {36, 4}, {100, 10}} {
 		meter := usageMeter(10, tc.percent)
-		if got := ansi.Strip(meter); got != tc.cells || ansi.StringWidth(meter) != 10 {
-			t.Fatalf("%g%%: %q", tc.percent, got)
+		if got := ansi.Strip(meter); got != "──────────" || ansi.StringWidth(meter) != 10 {
+			t.Fatalf("%g%% does not render a continuous line: %q", tc.percent, got)
 		}
-		if tc.percent == 36 && (!strings.Contains(meter, "\x1b[38;5;255m") || !strings.Contains(meter, "\x1b[38;5;245m")) {
-			t.Fatalf("meter segments lack distinct colors: %q", meter)
+		for _, segment := range []struct {
+			color string
+			cells int
+		}{{"255", tc.filled}, {"245", 10 - tc.filled}} {
+			coloredLine := "\x1b[38;5;" + segment.color + "m" + strings.Repeat("─", max(1, segment.cells))
+			if strings.Contains(meter, coloredLine) != (segment.cells > 0) {
+				t.Fatalf("%g%%: expected %d cells in color %s: %q", tc.percent, segment.cells, segment.color, meter)
+			}
 		}
 	}
 }
@@ -98,7 +104,7 @@ func TestUsageViewAtMinimumSize(t *testing.T) {
 	heading := strings.Index(view, "codex usage")
 	session, weekly := strings.Index(view, "5h 0% used"), strings.Index(view, "7d 43% used")
 	notifications, status := strings.Index(view, "notifications:"), strings.Index(view, m.status)
-	if notifications < 0 || status <= notifications || heading <= status || session <= heading || weekly <= session || !strings.Contains(view, "6 projects") || !strings.Contains(view, "█") {
+	if notifications < 0 || status <= notifications || heading <= status || session <= heading || weekly <= session || !strings.Contains(view, "6 projects") || !strings.Contains(view, "──────────") {
 		t.Fatalf("incomplete dashboard at 46 × 16: %s", view)
 	}
 	if strings.Contains(view, "3 resets available") || strings.Contains(view, "u details") {
