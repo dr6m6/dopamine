@@ -106,6 +106,13 @@ LogLevel ERROR
             "id": "fixture", "name": "Fixture", "path": str(project),
             "app_url": f"http://127.0.0.1:{app_port}/index.html?remote=1#test",
             "launch": [sys.executable, "-m", "http.server", str(app_port), "--bind", "127.0.0.1"]}]}))
+        usage_cache = root / "home-cache/ai-usagebar/openai"
+        usage_cache.mkdir(parents=True)
+        (usage_cache / "usage.json").write_text(json.dumps({
+            "rate_limit": {"primary_window": {"used_percent": 17, "limit_window_seconds": 604800}},
+            "rate_limit_reset_credits": {"available_count": 1, "credits": [{
+                "status": "available", "title": "Full reset fixture", "expires_at": "2099-12-12T12:00:00Z"}]},
+        }))
         env = os.environ.copy()
         env.update(HOME=temp, XDG_STATE_HOME=str(root / "xdg-state"), XDG_CONFIG_HOME=str(root / "xdg-config"),
                    CODEX_HOME=str(root / "codex"), PATH=str(shims) + ":" + env["PATH"],
@@ -118,6 +125,7 @@ LogLevel ERROR
         assignments = [f"{k}={v}" for k, v in env.items() if k in (
             "HOME", "PATH", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "CODEX_HOME", "SHELL", "TERM",
             "DOPAMINE_CONFIG_DIR", "DOPAMINE_STATE_DIR", "DOPAMINE_PROJECTS_ROOT", "DOPAMINE_EXECUTABLE")]
+        assignments.append(f"XDG_CACHE_HOME={root / 'home-cache'}")
         wrapper.write_text("#!/bin/sh\nunset TMUX TMUX_PANE DOPAMINE_TUI DOPAMINE_DASHBOARD\nexec " +
                            shlex.join([tools["env"], *assignments, binary]) + ' "$@"\n')
         wrapper.chmod(0o755)
@@ -178,6 +186,13 @@ LogLevel ERROR
             first, first_pty = connect()
             wait_for(lambda: "Fixture" in command("capture-pane", "-p", "-t", "dopamine:"), "home dashboard did not open through SSH")
             wait_for(lambda: bool(command("list-clients", "-F", "#{client_session}")), "SSH client did not attach to the dashboard")
+            wait_for(lambda: b"7d 17% used" in terminal_output and b"1 reset available" in terminal_output,
+                     "home usage and reset count did not reach the SSH terminal")
+            os.write(first_pty, b"u")
+            wait_for(lambda: b"Full reset fixture" in terminal_output and b"12 Dec 2099" in terminal_output,
+                     "reset title and expiry did not reach the SSH terminal")
+            os.write(first_pty, b"u")
+            wait_for(lambda: "> Fixture" in command("capture-pane", "-p", "-t", "dopamine:"), "usage view did not return to projects")
             os.write(first_pty, b"\r")
             wait_for(lambda: "start server" in command("capture-pane", "-p", "-t", "dopamine:"), "remote project menu did not open")
             os.write(first_pty, b"s")

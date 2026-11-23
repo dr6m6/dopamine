@@ -56,6 +56,11 @@ Replace `USER@HOME_TAILSCALE_IP` with the normal home account and the address fr
 
 Settings are saved privately in `~/.config/dopamine/remote.json`, honoring `XDG_CONFIG_HOME`; `--config PATH` selects another file. They contain a destination and paths, not key material. Re-running setup updates supplied fields and preserves other fields. Edit the file to remove an old optional override. The client is copied into `~/.local/bin` and can run independently of this checkout. Re-run the installer to update it; modified or unrelated installed commands are protected from replacement. `dopamine-remote install --uninstall` removes the owned client and preserves settings and all home data.
 
+The dashboard shows Codex usage and reset credits from the default OpenAI
+account in the home computer's AI Usage Bar cache. Press **u** for the snapshot
+time, quota reset times, and each available credit's expiry. Local and SSH
+clients use the same dashboard, so only the home computer needs AI Usage Bar.
+
 ## Open a home dev site in laptop Firefox
 
 Start the server from the remote dopamine project menu. In a second laptop terminal:

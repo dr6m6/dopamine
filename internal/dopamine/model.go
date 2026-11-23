@@ -35,6 +35,8 @@ var bright = lipgloss.NewStyle().Bold(true)
 var selected = lipgloss.NewStyle().Reverse(true)
 
 type loaded struct {
+	usage codexUsage
+
 	projects           []workspace.Project
 	apps               map[string]workspace.AppStatus
 	slots              []workspace.Slot
@@ -58,6 +60,10 @@ type notificationsToggled struct {
 }
 
 type Model struct {
+	usage       codexUsage
+	usageOpen   bool
+	usageOffset int
+
 	service            workspace.Service
 	projects           []workspace.Project
 	apps               map[string]workspace.AppStatus
@@ -98,12 +104,13 @@ func (m Model) load() tea.Cmd {
 		if m.sidebar {
 			return loaded{slots: slots, err: err}
 		}
+		usage := readCodexUsage()
 		r, loadErr := m.service.Load()
 		if loadErr != nil {
-			return loaded{slots: slots, err: loadErr}
+			return loaded{slots: slots, err: loadErr, usage: usage}
 		}
 		enabled, settingsErr := m.service.NotificationsEnabled()
-		return loaded{projects: r.Projects, apps: m.service.AppStatuses(r.Projects), slots: slots, err: errors.Join(err, settingsErr), notificationsMuted: !enabled}
+		return loaded{projects: r.Projects, apps: m.service.AppStatuses(r.Projects), slots: slots, err: errors.Join(err, settingsErr), notificationsMuted: !enabled, usage: usage}
 	}
 }
 
@@ -116,6 +123,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = v.Width, v.Height
 	case loaded:
+		m.usage = v.usage
 		id := ""
 		global := m.ready && !m.projectOpen && m.project >= len(m.projects)
 		globalIndex := m.project - len(m.projects)
@@ -267,12 +275,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.sidebar || m.busy {
 			return m, nil
 		}
+		if m.usageOpen {
+			return m.updateUsage(key), nil
+		}
 		if key == "esc" && m.projectOpen {
 			m.projectOpen, m.status = false, ""
 			return m, nil
 		}
 		if !m.projectOpen {
 			switch key {
+			case "u":
+				m.usageOpen, m.usageOffset = true, 0
 			case "j", "down":
 				m.project = min(len(m.projects)+globalActionCount-1, m.project+1)
 			case "k", "up":
@@ -463,6 +476,9 @@ func (m Model) dashboard(width int) string {
 	if m.width < 46 || m.height < 16 {
 		return "\n" + "  " + bright.Render("dopamine") + "\n\nenlarge terminal to 46 × 16."
 	}
+	if m.usageOpen {
+		return m.usageView(width)
+	}
 	if m.projectOpen && len(m.projects) > 0 {
 		if m.serverSettings {
 			return m.serverSettingsView(width)
@@ -476,7 +492,10 @@ func (m Model) dashboard(width int) string {
 		return m.folderView(width)
 	}
 	lines := []string{"", "  " + bright.Render("dopamine"), ""}
-	if m.height >= 22 {
+	usage := m.usage.summary(width, time.Now())
+	lines = append(lines, usage...)
+	lines = append(lines, "")
+	if m.height >= 23+len(usage) {
 		lines = append(lines, muted.Render("  "+strings.ReplaceAll(Molecule, "\n", "\n  ")), "")
 	}
 	// Molecule is multiline, so count actual rows instead of string entries.
@@ -571,6 +590,7 @@ func (m Model) helpView() string {
 		"s / x / o    project server actions",
 		"n / t        new codex / project terminal",
 		"c / a        cloud task / server autostart",
+		"u            codex usage and reset credits",
 		"1…9          select slot",
 		"alt+1…9      select slot from terminal",
 		"alt+←→       previous / next slot",
