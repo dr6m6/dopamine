@@ -12,8 +12,11 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
+
+var usageFilled = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
 
 type codexUsage struct {
 	Limit      usageLimit `json:"rate_limit"`
@@ -133,16 +136,22 @@ func (w usageWindow) resetTime(updated time.Time) time.Time {
 	return time.Time{}
 }
 
-func (w usageWindow) summary(updated, now time.Time) string {
+func (w usageWindow) summary(updated, now time.Time, compact bool) string {
+	label := w.percent()
+	prefix := " · resets in "
+	if compact {
+		label = strings.TrimSuffix(label, " used")
+		prefix = " · reset "
+	}
 	reset := w.resetTime(updated)
 	if reset.IsZero() {
-		return w.percent()
+		return label
 	}
 	remaining := reset.Sub(now)
 	if remaining <= 0 {
-		return w.percent() + " · reset due"
+		return label + " · reset due"
 	}
-	return w.percent() + " · resets in " + resetCountdown(remaining)
+	return label + prefix + resetCountdown(remaining)
 }
 
 func (u codexUsage) resetCount() string {
@@ -155,37 +164,43 @@ func (u codexUsage) resetCount() string {
 	return fmt.Sprintf("%d resets available", *u.Resets.Available)
 }
 
-func (u codexUsage) summary(width int, now time.Time) []string {
+func usageMeter(width int, percent float64) string {
+	filled := int(math.Round(float64(width) * percent / 100))
+	return usageFilled.Render(strings.Repeat("█", filled)) + muted.Render(strings.Repeat("░", width-filled))
+}
+
+func (u codexUsage) meters(width int, now time.Time) []string {
 	if u.updated.IsZero() {
-		return []string{"  " + muted.Render("codex usage unavailable · u details")}
+		return []string{"  " + muted.Render("codex usage unavailable")}
 	}
 	heading := "codex usage"
 	if u.isStale(now) {
 		heading += " (stale)"
 	}
-	lines := []string{"  " + bright.Render(heading) + muted.Render(" · u details")}
+	lines := []string{"  " + bright.Render(heading)}
 	windows := u.Limit.windows()
 	if len(windows) == 0 {
-		lines = append(lines, "  "+muted.Render("quota unavailable"))
+		return append(lines, "  "+muted.Render("quota unavailable"))
 	}
+	const minBar = 10
+	const maxBar = 26
+	const spacing = 4 // two cells of indentation and two between the bar and label
+	labels := make([]string, 0, len(windows))
+	labelWidth := 0
 	for _, w := range windows {
-		lines = append(lines, "  "+w.summary(u.updated, now))
-	}
-	resets := u.resetCount()
-	if u.Resets.Available != nil && *u.Resets.Available > 0 {
-		var soonest time.Time
-		for _, credit := range u.Resets.Credits {
-			if credit.Status == "available" && !credit.ExpiresAt.IsZero() && (soonest.IsZero() || credit.ExpiresAt.Before(soonest)) {
-				soonest = credit.ExpiresAt
-			}
+		label := w.summary(u.updated, now, false)
+		if ansi.StringWidth(label) > width-spacing-minBar {
+			label = w.summary(u.updated, now, true)
 		}
-		if soonest.After(now) {
-			resets += " · exp " + soonest.Local().Format("02 Jan")
-		} else if !soonest.IsZero() {
-			resets += " · expiry passed"
-		}
+		label = ansi.Truncate(label, max(0, width-spacing-minBar), "…")
+		labels = append(labels, label)
+		labelWidth = max(labelWidth, ansi.StringWidth(label))
 	}
-	return append(lines, "  "+ansi.Truncate(resets, max(0, width-2), "…"))
+	barWidth := max(0, min(maxBar, width-spacing-labelWidth))
+	for i, w := range windows {
+		lines = append(lines, "  "+usageMeter(barWidth, *w.Used)+"  "+labels[i])
+	}
+	return lines
 }
 
 func (u codexUsage) detailLines(width int, now time.Time) []string {
@@ -204,7 +219,7 @@ func (u codexUsage) detailLines(width int, now time.Time) []string {
 		}
 		lines = append(lines, ansi.Truncate(label, width, "…"))
 		for _, w := range windows {
-			lines = append(lines, "  "+w.summary(u.updated, now))
+			lines = append(lines, "  "+w.summary(u.updated, now, false))
 			if reset := w.resetTime(u.updated); !reset.IsZero() {
 				lines = append(lines, "  resets "+reset.Local().Format(localDate))
 			}

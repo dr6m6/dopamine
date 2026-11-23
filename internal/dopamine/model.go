@@ -492,15 +492,19 @@ func (m Model) dashboard(width int) string {
 		return m.folderView(width)
 	}
 	lines := []string{"", "  " + bright.Render("dopamine"), ""}
-	usage := m.usage.summary(width, time.Now())
-	lines = append(lines, usage...)
-	lines = append(lines, "")
-	if m.height >= 23+len(usage) {
-		lines = append(lines, muted.Render("  "+strings.ReplaceAll(Molecule, "\n", "\n  ")), "")
+	usage := m.usage.meters(width, time.Now())
+	status := clean(m.status)
+	reserved := 7 + len(usage) // actions (5), project counter (1), and space above usage (1)
+	if status != "" {
+		reserved += 2
 	}
-	// Molecule is multiline, so count actual rows instead of string entries.
-	used := len(strings.Split(strings.Join(lines, "\n"), "\n"))
-	rows := max(1, m.height-used-9)
+	if m.height >= max(22, 21+len(usage)) {
+		for _, line := range strings.Split(Molecule, "\n") {
+			lines = append(lines, muted.Render("  "+line))
+		}
+		lines = append(lines, "")
+	}
+	rows := max(1, m.height-len(lines)-reserved)
 	start := max(0, min(m.project, len(m.projects)-1)-rows+1)
 	nameWidth := 0
 	for _, p := range m.projects {
@@ -550,8 +554,13 @@ func (m Model) dashboard(width int) string {
 		notifications = "off"
 	}
 	lines = append(lines, "", prefix+"notifications: "+notifications)
-	lines = append(lines, "", clean(m.status))
-	return strings.Join(lines, "\n")
+	if status != "" {
+		lines = append(lines, "", status)
+	}
+	for len(lines)+len(usage) < m.height {
+		lines = append(lines, "")
+	}
+	return strings.Join(append(lines, usage...), "\n")
 }
 
 func (m Model) projectView() string {
@@ -590,7 +599,7 @@ func (m Model) helpView() string {
 		"s / x / o    project server actions",
 		"n / t        new codex / project terminal",
 		"c / a        cloud task / server autostart",
-		"u            codex usage and reset credits",
+		"u            codex usage and resets",
 		"1…9          select slot",
 		"alt+1…9      select slot from terminal",
 		"alt+←→       previous / next slot",

@@ -186,11 +186,14 @@ LogLevel ERROR
             first, first_pty = connect()
             wait_for(lambda: "Fixture" in command("capture-pane", "-p", "-t", "dopamine:"), "home dashboard did not open through SSH")
             wait_for(lambda: bool(command("list-clients", "-F", "#{client_session}")), "SSH client did not attach to the dashboard")
-            wait_for(lambda: b"7d 17% used" in terminal_output and b"1 reset available" in terminal_output,
-                     "home usage and reset count did not reach the SSH terminal")
+            wait_for(lambda: b"7d 17% used" in terminal_output and "█".encode() in terminal_output,
+                     "home usage meter did not reach the SSH terminal")
+            dashboard = command("capture-pane", "-p", "-t", "dopamine:")
+            assert dashboard.index("notifications:") < dashboard.index("codex usage") < dashboard.index("7d 17% used")
+            assert "1 reset available" not in dashboard and "u details" not in dashboard
             os.write(first_pty, b"u")
-            wait_for(lambda: b"Full reset fixture" in terminal_output and b"12 Dec 2099" in terminal_output,
-                     "reset title and expiry did not reach the SSH terminal")
+            wait_for(lambda: b"1 reset available" in terminal_output and b"Full reset fixture" in terminal_output
+                     and b"Dec 2099" in terminal_output, "reset count, title and expiry did not reach the SSH terminal")
             os.write(first_pty, b"u")
             wait_for(lambda: "> Fixture" in command("capture-pane", "-p", "-t", "dopamine:"), "usage view did not return to projects")
             os.write(first_pty, b"\r")

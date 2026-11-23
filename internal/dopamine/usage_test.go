@@ -40,23 +40,40 @@ func TestWeeklyOnlyUsageAndResetCredits(t *testing.T) {
 		t.Fatal(err)
 	}
 	u := readCodexUsage()
-	summary := ansi.Strip(strings.Join(u.summary(38, updated.Add(5*time.Minute)), "\n"))
-	for _, label := range []string{"7d 13% used · resets in 1h 55m", "3 resets available · exp", "u details"} {
+	summary := ansi.Strip(strings.Join(u.meters(38, updated.Add(5*time.Minute)), "\n"))
+	for _, label := range []string{"codex usage", "7d 13% · reset 1h 55m", "█", "░"} {
 		if !strings.Contains(summary, label) {
 			t.Fatalf("missing %q in %q", label, summary)
 		}
 	}
-	if strings.Contains(summary, "5h") || strings.Contains(summary, "stale") {
-		t.Fatalf("unexpected window or stale state in %q", summary)
+	for _, label := range []string{"5h", "stale", "3 resets available", "u details"} {
+		if strings.Contains(summary, label) {
+			t.Fatalf("unexpected %q in %q", label, summary)
+		}
 	}
 	details := strings.Join(u.detailLines(38, updated.Add(time.Hour)), "\n")
-	for _, label := range []string{"stale", "Full reset", "expires " + time.Date(2026, 12, 12, 12, 0, 0, 0, time.UTC).Local().Format("02 Jan 2006 15:04 MST"), "Weekly reset", "expiry unavailable", "some reset details unavailable"} {
+	for _, label := range []string{"stale", "3 resets available", "Full reset", "expires " + time.Date(2026, 12, 12, 12, 0, 0, 0, time.UTC).Local().Format("02 Jan 2006 15:04 MST"), "Weekly reset", "expiry unavailable", "some reset details unavailable"} {
 		if !strings.Contains(details, label) {
 			t.Fatalf("missing %q in %q", label, details)
 		}
 	}
 	if strings.Contains(details, "Spent reset") {
 		t.Fatalf("redeemed credit shown in %q", details)
+	}
+}
+
+func TestUsageMeterSegments(t *testing.T) {
+	for _, tc := range []struct {
+		percent float64
+		cells   string
+	}{{0, "░░░░░░░░░░"}, {36, "████░░░░░░"}, {100, "██████████"}} {
+		meter := usageMeter(10, tc.percent)
+		if got := ansi.Strip(meter); got != tc.cells || ansi.StringWidth(meter) != 10 {
+			t.Fatalf("%g%%: %q", tc.percent, got)
+		}
+		if tc.percent == 36 && (!strings.Contains(meter, "\x1b[38;5;255m") || !strings.Contains(meter, "\x1b[38;5;245m")) {
+			t.Fatalf("meter segments lack distinct colors: %q", meter)
+		}
 	}
 }
 
@@ -72,15 +89,28 @@ func TestUsageViewAtMinimumSize(t *testing.T) {
 	}`)
 	m := dashboardFixture()
 	m.width, m.height = 46, 16
+	m.status = "server started"
+	for range 4 {
+		m.projects = append(m.projects, m.projects[0])
+	}
 	m.usage = readCodexUsage()
 	view := ansi.Strip(m.View().Content)
+	heading := strings.Index(view, "codex usage")
 	session, weekly := strings.Index(view, "5h 0% used"), strings.Index(view, "7d 43% used")
-	if session < 0 || weekly <= session || !strings.Contains(view, "3 resets available") || !strings.Contains(view, "notifications:") {
+	notifications, status := strings.Index(view, "notifications:"), strings.Index(view, m.status)
+	if notifications < 0 || status <= notifications || heading <= status || session <= heading || weekly <= session || !strings.Contains(view, "6 projects") || !strings.Contains(view, "█") {
 		t.Fatalf("incomplete dashboard at 46 × 16: %s", view)
+	}
+	if strings.Contains(view, "3 resets available") || strings.Contains(view, "u details") {
+		t.Fatalf("reset credits or shortcut leaked onto the dashboard: %s", view)
+	}
+	help, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+	if !strings.Contains(ansi.Strip(help.View().Content), "u            codex usage and resets") {
+		t.Fatalf("usage shortcut missing in help: %s", help.View().Content)
 	}
 	updated, _ := m.Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
 	m = updated.(Model)
-	if view = ansi.Strip(m.View().Content); !strings.Contains(view, "Full reset") || !strings.Contains(view, "↑↓ scroll · esc back") {
+	if view = ansi.Strip(m.View().Content); !strings.Contains(view, "3 resets available") || !strings.Contains(view, "Full reset") || !strings.Contains(view, "↑↓ scroll · esc back") {
 		t.Fatalf("usage details did not open: %s", view)
 	}
 	for range 10 {
