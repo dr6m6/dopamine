@@ -22,6 +22,7 @@ type Project struct {
 	Launch           []string `json:"launch,omitempty"`
 	LaunchVPN        bool     `json:"launch_vpn,omitempty"`
 	AppURL           string   `json:"app_url,omitempty"`
+	AppID            string   `json:"app_id,omitempty"`
 	CloudEnvironment string   `json:"cloud_environment,omitempty"`
 	ServerAutostart  string   `json:"server_autostart,omitempty"`
 }

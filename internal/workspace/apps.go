@@ -78,6 +78,13 @@ func (s Service) startDetached(p Project, kind string) (r Record, err error) {
 	}
 	token := shortHash(s.StateDir + key + strconv.FormatInt(time.Now().UnixNano(), 10))
 	env := s.paneEnvironment(p.ID)
+	if kind == "app" && p.AppID != "" {
+		for _, key := range []string{"XDG_RUNTIME_DIR", "WAYLAND_DISPLAY", "DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS"} {
+			if value, ok := os.LookupEnv(key); ok {
+				env = append(env, key+"="+value)
+			}
+		}
+	}
 	// Pass identity after vpn-run, whose existing environment allowlist is kept.
 	if kind == "app" {
 		args = append([]string{"env", "DOPAMINE_APP_TOKEN=" + token}, args...)

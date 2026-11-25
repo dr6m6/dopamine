@@ -105,6 +105,8 @@ Example with Python's HTTP server:
 
 The directory must exist. `launch` runs in that directory without implicit shell interpolation; use your own script for a complex command. The server must remain in the foreground. Open the project's menu, choose `start server`, then `open url`. `stop server` stops the managed launch. Normal local URLs use `localhost`, `127.0.0.1`, or `::1`.
 
+For a native Niri application, set `app_id` to its Wayland application ID instead of `app_url`. Use a foreground command such as `"launch": ["./run"]`. **Start server** starts or focuses the app, **Open app** brings it forward or starts it, and **Stop server** stops the launch owned by Dopamine.
+
 ## Update
 
 ```sh

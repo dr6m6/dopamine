@@ -361,11 +361,17 @@ func (m Model) perform(key string, p workspace.Project) tea.Cmd {
 	return func() tea.Msg {
 		switch key {
 		case "s":
+			if p.AppID != "" {
+				return finished{message: "opened · " + p.Name, err: m.service.OpenNativeApp(p)}
+			}
 			_, err := m.service.Start(p, "app", "")
 			return finished{message: "server started · " + p.Name, err: err}
 		case "x":
 			return finished{message: "server stopped · " + p.Name, err: m.service.StopApp(p)}
 		case "o", "b":
+			if p.AppID != "" {
+				return finished{message: "opened · " + p.Name, err: m.service.OpenNativeApp(p)}
+			}
 			if p.AppURL == "" {
 				return finished{err: fmt.Errorf("no url configured for %s · edit %s", p.Name, m.service.RegistryPath())}
 			}
